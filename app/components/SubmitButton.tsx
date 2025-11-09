@@ -2,6 +2,7 @@ interface SubmitButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement
   children: React.ReactNode;
 }
 
+// Reusable submit button component with consistent purple styling and hover effects
 export function SubmitButton({ children, className = "", ...props }: SubmitButtonProps) {
   return (
     <button
@@ -13,4 +14,3 @@ export function SubmitButton({ children, className = "", ...props }: SubmitButto
     </button>
   );
 }
-

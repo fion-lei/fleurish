@@ -1,33 +1,28 @@
 import { useState, useMemo, useEffect } from "react";
-import { fetchAvailableGardens, searchGardens } from "../api/gardens";
+import { getAllUsers } from "../api/users";
 
 export interface GardenListItem {
   id: string;
   name: string;
-  community: string;
   ownerId: string;
+  coins?: number;
+  gems?: number;
+  communityName?: string;
 }
 
 interface VisitGardenModalProps {
   isOpen: boolean;
   onClose: () => void;
   onVisit: (gardenId: string) => void;
-  userCommunities?: string[];
 }
 
-export function VisitGardenModal({
-  isOpen,
-  onClose,
-  onVisit,
-  userCommunities = [],
-}: VisitGardenModalProps) {
+export function VisitGardenModal({ isOpen, onClose, onVisit }: VisitGardenModalProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState<"community" | "all">("community");
   const [gardens, setGardens] = useState<GardenListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load gardens when modal opens or filter changes
+  // Load gardens when modal opens
   useEffect(() => {
     if (!isOpen) return;
 
@@ -35,8 +30,24 @@ export function VisitGardenModal({
       setIsLoading(true);
       setError(null);
       try {
-        const data = await fetchAvailableGardens(filterType, userCommunities);
-        setGardens(data);
+        // Get all users with their garden info, coins, gems, and community
+        const users = await getAllUsers();
+        console.log("getAllUsers result:", users);
+
+        // Map users to garden list items
+        const gardensList = users
+          .filter((user) => user.gardenId)
+          .map((user) => ({
+            id: user.gardenId!,
+            name: user.username || "Someone's Garden",
+            ownerId: user._id,
+            coins: user.coins,
+            gems: user.gems,
+            communityName: user.communityName,
+          }));
+        
+        console.log("Final gardens list:", gardensList);
+        setGardens(gardensList);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load gardens");
       } finally {
@@ -45,43 +56,17 @@ export function VisitGardenModal({
     };
 
     loadGardens();
-  }, [isOpen, filterType, userCommunities]);
+  }, [isOpen]);
 
-  // Search gardens when search term changes
-  useEffect(() => {
-    if (!isOpen || !searchTerm.trim()) return;
-
-    const performSearch = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const data = await searchGardens(searchTerm, filterType, userCommunities);
-        setGardens(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to search gardens");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    const debounceTimer = setTimeout(performSearch, 300);
-    return () => clearTimeout(debounceTimer);
-  }, [searchTerm, isOpen, filterType, userCommunities]);
-
+  // Filter gardens based on search term
   const filteredGardens = useMemo(() => {
-    if (searchTerm.trim()) {
+    if (!searchTerm.trim()) {
       return gardens;
     }
 
-    // If no search, filter by community if needed
-    if (filterType === "community") {
-      return gardens.filter((garden) =>
-        userCommunities.includes(garden.community)
-      );
-    }
-
-    return gardens;
-  }, [gardens, searchTerm, filterType, userCommunities]);
+    const lowerQuery = searchTerm.toLowerCase();
+    return gardens.filter((garden) => garden.name.toLowerCase().includes(lowerQuery));
+  }, [gardens, searchTerm]);
 
   if (!isOpen) return null;
 
@@ -97,19 +82,11 @@ export function VisitGardenModal({
         <div className="p-6 border-b border-gray-200 space-y-4">
           <input
             type="text"
-            placeholder="Search"
+            placeholder="Search gardens by name"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full px-4 py-2 rounded-lg border-2 border-gray-300 focus:border-fleur-green focus:outline-none"
           />
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value as "community" | "all")}
-            className="w-full px-4 py-2 rounded-lg border-2 border-gray-300 focus:border-fleur-green focus:outline-none"
-          >
-            <option value="community">My Community</option>
-            <option value="all">All</option>
-          </select>
         </div>
 
         {/* Gardens List */}
@@ -134,10 +111,30 @@ export function VisitGardenModal({
                   className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex-1">
-                    <h3 className="font-semibold text-gray-800">
-                      {garden.name}
-                    </h3>
-                    <p className="text-sm text-gray-500">{garden.community}</p>
+                    <h3 className="font-semibold text-gray-800">{garden.name}</h3>
+                    {garden.communityName && (
+                      <p className="text-sm text-gray-500">{garden.communityName}</p>
+                    )}
+                    <div className="flex items-center gap-3 mt-1">
+                      <div className="flex items-center gap-1">
+                        <img
+                          src="/images/gem.svg"
+                          alt="Gems"
+                          className="w-4 h-4"
+                          aria-hidden="true"
+                        />
+                        <span className="text-sm text-gray-600">{garden.gems ?? 0}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <img
+                          src="/images/coin.svg"
+                          alt="Coins"
+                          className="w-4 h-4"
+                          aria-hidden="true"
+                        />
+                        <span className="text-sm text-gray-600">{garden.coins ?? 0}</span>
+                      </div>
+                    </div>
                   </div>
                   <button
                     onClick={() => {
@@ -181,4 +178,3 @@ export function VisitGardenModal({
     </div>
   );
 }
-

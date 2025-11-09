@@ -2,8 +2,9 @@ import type { Route } from "./+types/community-tasks";
 import { Navbar } from "../components/Navbar";
 import { useState } from "react";
 import TaskDetails from "~/components/TaskDetails";
-import TaskList from "~/components/TaskList";
 import type { Task } from "~/components/TaskList";
+import TaskList from "~/components/TaskList";
+import { Navbar } from "../components/Navbar";
 
 export function meta({}: Route.MetaArgs) {
   return [

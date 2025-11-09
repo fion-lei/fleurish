@@ -34,9 +34,6 @@ export default {
         slideIn: 'slideIn 0.2s ease-out'
       }
     }
-        pill: "9999px",
-      },
-    },
   },
   plugins: [],
 };

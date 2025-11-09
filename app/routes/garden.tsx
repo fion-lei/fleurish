@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchGardenById } from "../api/gardens";
+import { fetchGardenById, updateGardenName, fetchGardenName } from "../api/gardens";
 import { GardenFooter } from "../components/GardenFooter";
 import { GardenGrid, createInitialGarden, type GardenCell, type PlantType } from "../components/GardenGrid";
 import { InventoryPanel } from "../components/InventoryPanel";
 import { Navbar } from "../components/Navbar";
+import { useAuth } from "../components/AuthContext";
 import { VisitGardenModal } from "../components/VisitGardenModal";
 import type { Route } from "./+types/garden";
 
@@ -15,14 +16,20 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Garden() {
+  const { user } = useAuth();
   const [garden, setGarden] = useState<GardenCell[][]>(createInitialGarden());
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [selectedPlant, setSelectedPlant] = useState<PlantType | null>(null);
   const [gems, setGems] = useState(0);
   const [coins, setCoins] = useState(75);
-  const [gardenName, setGardenName] = useState("Garden Name");
+  const [gardenName, setGardenName] = useState("");
+  const [showNamePlaceholder, setShowNamePlaceholder] = useState(false);
+  const [gardenId, setGardenId] = useState<string | null>(null);
   const [selectedLand, setSelectedLand] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
+  const [hasUnsavedNameChanges, setHasUnsavedNameChanges] = useState(false);
+  const [nameSaveStatus, setNameSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [debugInfo, setDebugInfo] = useState<string>("");
   const [purchasedPlants, setPurchasedPlants] = useState<Record<PlantType, number>>({
     pink: 0,
     purple: 0,
@@ -100,6 +107,7 @@ export default function Garden() {
       setVisitingGardenName(gardenData.name);
       setIsVisiting(true);
       setIsInventoryOpen(false);
+      setGardenId(gardenData.id);
     } catch (error) {
       console.error("Failed to load garden:", error);
       alert("Failed to load garden. Please try again.");
@@ -172,12 +180,102 @@ export default function Garden() {
     setIsEditingName(true);
   };
 
+  const handleSaveGardenName = async () => {
+    console.log("Save button clicked!", { gardenId, gardenName, hasUnsavedNameChanges });
+    setDebugInfo(`🔘 Button clicked!\nGarden ID: ${gardenId || 'null'}\nGarden Name: ${gardenName}\nHas Unsaved: ${hasUnsavedNameChanges}`);
+    
+    if (!gardenId) {
+      setDebugInfo(`✗ Error: No garden ID found!\nCannot save without a garden ID.`);
+      return;
+    }
+    
+    if (!gardenName.trim()) {
+      setDebugInfo(`✗ Error: Garden name is empty!`);
+      return;
+    }
+    
+    if (!hasUnsavedNameChanges) {
+      setDebugInfo(`✗ Error: No unsaved changes detected!`);
+      return;
+    }
+    
+    if (gardenId && gardenName.trim() && hasUnsavedNameChanges) {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+      const url = `${API_BASE_URL}gardens/${gardenId}/name`;
+      setDebugInfo(`📡 Sending request...\nURL: ${url}\nGarden ID: ${gardenId}\nNew Name: ${gardenName}`);
+      setNameSaveStatus("saving");
+      try {
+        const updated = await updateGardenName(gardenId, gardenName.trim());
+        console.log("Garden name updated successfully");
+        setGardenName(updated);
+        setHasUnsavedNameChanges(false);
+        setNameSaveStatus("saved");
+        setDebugInfo(prev => `${prev ? prev + "\n" : ""}✓ Saved successfully!\nURL: ${url}\nName: ${gardenName}`);
+      } catch (error) {
+        console.error("Failed to update garden name:", error);
+        setNameSaveStatus("error");
+        setDebugInfo(prev => `${prev ? prev + "\n" : ""}✗ Error: ${error instanceof Error ? error.message : 'Unknown error'}\nURL: ${url}`);
+      }
+    }
+  };
+
+  const handleGardenNameBlur = async () => {
+    setIsEditingName(false);
+  };
+
+  const handleGardenNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isVisiting) {
+      setGardenName(e.target.value);
+      setHasUnsavedNameChanges(true);
+      setNameSaveStatus("idle");
+      setDebugInfo(`Changed name to: "${e.target.value}"\nHas unsaved changes: true\nCurrent gardenId: ${gardenId || 'null'}`);
+    }
+  };
+
   useEffect(() => {
     if (isEditingName && gardenNameInputRef.current) {
       gardenNameInputRef.current.focus();
       gardenNameInputRef.current.select();
     }
   }, [isEditingName]);
+
+  // Set gardenId from /users/me (AuthContext) when available
+  useEffect(() => {
+    if (!isVisiting) {
+      if (user?.gardenId) {
+        setGardenId(user.gardenId);
+        setDebugInfo((prev) => `${prev ? prev + "\n" : ""}User gardenId from /users/me: ${user.gardenId}`);
+      } else if (user) {
+        setDebugInfo((prev) => `${prev ? prev + "\n" : ""}No gardenId found on /users/me response`);
+      }
+    }
+  }, [user, isVisiting]);
+
+  // Delay showing input placeholder for a couple seconds so it stays empty first
+  useEffect(() => {
+    const timer = setTimeout(() => setShowNamePlaceholder(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Once we have a gardenId, fetch its current gardenName and populate input
+  useEffect(() => {
+    const loadGardenName = async () => {
+      if (gardenId && !isVisiting) {
+        try {
+          const name = await fetchGardenName(gardenId);
+          if (name) {
+            setGardenName(name);
+            setHasUnsavedNameChanges(false);
+            setNameSaveStatus("saved");
+            setDebugInfo((prev) => `${prev ? prev + "\n" : ""}Fetched gardenName from /gardens/${gardenId}: ${name}`);
+          }
+        } catch (e) {
+          setDebugInfo((prev) => `${prev ? prev + "\n" : ""}Failed to fetch gardenName: ${e instanceof Error ? e.message : 'Unknown error'}`);
+        }
+      }
+    };
+    loadGardenName();
+  }, [gardenId, isVisiting]);
 
   const handleBuyDirt = (row: number, col: number) => {
     const cell = garden[row][col];
@@ -204,25 +302,41 @@ export default function Garden() {
       <Navbar />
       
       <main className="flex-1 pt-[73.6px] pb-20 px-4 sm:px-6 lg:px-8 flex flex-col overflow-hidden">
-        {/* Garden Name - Editable (right under navbar) */}
         <div className="pt-6 pb-4 flex items-center justify-center gap-2">
           <input
             ref={gardenNameInputRef}
             type="text"
             value={isVisiting ? visitingGardenName : gardenName}
-            onChange={(e) => !isVisiting && setGardenName(e.target.value)}
-            onBlur={() => setIsEditingName(false)}
+            onChange={handleGardenNameChange}
+            onBlur={handleGardenNameBlur}
             disabled={isVisiting}
             className={`text-2xl md:text-3xl font-bold text-black text-center bg-transparent border-2 rounded-lg outline-none focus:outline-none focus:ring-2 focus:ring-fleur-green/30 pb-2 px-4 py-2 transition-all duration-200 ${
               isVisiting
                 ? "border-dashed border-gray-300 cursor-not-allowed"
+                : nameSaveStatus === "saved"
+                ? "border-solid border-fleur-green bg-fleur-green/10"
+                : nameSaveStatus === "saving"
+                ? "border-solid border-yellow-400 animate-pulse"
+                : nameSaveStatus === "error"
+                ? "border-solid border-red-500"
+                : hasUnsavedNameChanges
+                ? "border-solid border-yellow-500"
                 : isEditingName
                 ? "border-fleur-green border-solid focus:border-fleur-green/70"
                 : "border-dashed border-fleur-green/40 hover:border-fleur-green/60"
             }`}
-            placeholder="Click to edit garden name"
+            placeholder={showNamePlaceholder ? "Click to edit garden name" : ""}
           />
-          {!isVisiting && (
+          {!isVisiting && hasUnsavedNameChanges && (
+            <button
+              onClick={handleSaveGardenName}
+              disabled={nameSaveStatus === "saving"}
+              className="px-4 py-2 bg-fleur-green text-white font-semibold rounded-lg hover:bg-fleur-green/80 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {nameSaveStatus === "saving" ? "Saving..." : "Save"}
+            </button>
+          )}
+          {!isVisiting && !hasUnsavedNameChanges && (
             <button
               onClick={handleEditIconClick}
               className="p-1 text-fleur-green/70 hover:text-fleur-green transition-colors"
@@ -246,6 +360,14 @@ export default function Garden() {
             </button>
           )}
         </div>
+
+        {/* Debug Info Display */}
+        {debugInfo && (
+          <div className="mx-auto max-w-2xl mb-4 p-4 bg-gray-800 text-white rounded-lg text-sm font-mono whitespace-pre-wrap">
+            <div className="font-bold mb-2">🔍 Debug Info:</div>
+            {debugInfo}
+          </div>
+        )}
         
         {/* Selected plant indicator */}
         {selectedPlant && (
@@ -310,7 +432,6 @@ export default function Garden() {
                 onSelectPlant={setSelectedPlant}
                 selectedPlant={selectedPlant}
                 onSelectLand={handleSelectLand}
-                selectedLand={selectedLand}
                 landPrice={landPrice}
                 gems={gems}
                 onBuyPlant={handleBuyPlant}
@@ -319,8 +440,6 @@ export default function Garden() {
                 purchasedPlants={purchasedPlants}
                 harvestedPlants={harvestedPlants}
                 onSellPlant={handleSellPlant}
-                selectedHarvestedPlant={selectedHarvestedPlant}
-                onSelectHarvestedPlant={setSelectedHarvestedPlant}
                 harvestPrice={harvestPrice}
               />
             </div>
@@ -336,7 +455,6 @@ export default function Garden() {
                   onSelectPlant={setSelectedPlant}
                   selectedPlant={selectedPlant}
                   onSelectLand={handleSelectLand}
-                  selectedLand={selectedLand}
                   landPrice={landPrice}
                   gems={gems}
                   onBuyPlant={handleBuyPlant}
@@ -345,8 +463,6 @@ export default function Garden() {
                   purchasedPlants={purchasedPlants}
                   harvestedPlants={harvestedPlants}
                   onSellPlant={handleSellPlant}
-                  selectedHarvestedPlant={selectedHarvestedPlant}
-                  onSelectHarvestedPlant={setSelectedHarvestedPlant}
                   harvestPrice={harvestPrice}
                   onClose={() => setIsInventoryOpen(false)}
                 />

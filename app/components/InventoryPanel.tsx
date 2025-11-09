@@ -9,9 +9,14 @@ interface InventoryPanelProps {
   landPrice?: number;
   gems?: number;
   onBuyPlant?: (plantType: PlantType) => void;
-  plantPrice?: number;
+  plantPrices?: Record<PlantType, number>;
   coins?: number;
   purchasedPlants?: Record<PlantType, number>;
+  harvestedPlants?: Record<PlantType, number>;
+  onSellPlant?: (plantType: PlantType) => void;
+  selectedHarvestedPlant?: PlantType | null;
+  onSelectHarvestedPlant?: (plant: PlantType | null) => void;
+  harvestPrice?: number;
   onClose?: () => void;
 }
 
@@ -23,9 +28,14 @@ export function InventoryPanel({
   landPrice, 
   gems,
   onBuyPlant,
-  plantPrice,
+  plantPrices,
   coins,
   purchasedPlants,
+  harvestedPlants,
+  onSellPlant,
+  selectedHarvestedPlant,
+  onSelectHarvestedPlant,
+  harvestPrice,
   onClose 
 }: InventoryPanelProps) {
   const [activeTab, setActiveTab] = useState<"inventory" | "shop">("inventory");
@@ -33,7 +43,8 @@ export function InventoryPanel({
 
   const plantTypes: PlantType[] = ["pink", "purple", "yellow"];
   const canAffordLand = landPrice && gems !== undefined && gems >= landPrice;
-  const canAffordPlant = plantPrice && coins !== undefined && coins >= plantPrice;
+  // For plant affordability, check if any plant price is affordable (we'll check specific price when buying)
+  const canAffordPlant = coins !== undefined && plantPrices && Math.min(...Object.values(plantPrices)) <= coins;
 
   return (
     <div className="w-full h-full bg-fleur-green/20 rounded-lg shadow-soft border border-fleur-green/30 flex flex-col overflow-hidden">
@@ -97,58 +108,115 @@ export function InventoryPanel({
       {/* Content */}
       <div className="flex-1 p-4 pb-6 overflow-y-auto min-h-0">
         {activeTab === "inventory" ? (
-          <div className="space-y-4">
-            {Object.values(purchasedPlants || {}).every(count => count === 0) ? (
-              <p className="text-center text-sm text-gray-500 mt-4">
-                No plants in inventory.
-              </p>
-            ) : (
-              <div className="grid grid-cols-3 gap-3">
-                {plantTypes.map((plantType) => {
-                  const count = purchasedPlants?.[plantType] || 0;
-                  if (count === 0) return null;
-                  return (
-                    <button
-                      key={plantType}
-                      onClick={() => onSelectPlant(selectedPlant === plantType ? null : plantType)}
-                      className={`
-                        aspect-square bg-white rounded-lg border-2 transition-all duration-200
-                        flex flex-col items-center justify-center p-2 relative
-                        ${
-                          selectedPlant === plantType
-                            ? "border-fleur-green ring-2 ring-fleur-green/50 shadow-soft"
-                            : "border-gray-200 hover:border-fleur-green/50"
-                        }
-                      `}
-                    >
-                      <img
-                        src={`/sprites/plants/${plantType}_2.png`}
-                        alt={plantType}
-                        className="w-12 h-12 object-contain pixelated mb-2"
-                      />
-                      <span className="text-xs font-semibold text-gray-700 capitalize">{plantType}</span>
-                      <span className="text-xs text-gray-500">x{count}</span>
-                    </button>
-                  );
-                })}
+          <div className="space-y-6">
+            {/* Seedlings section */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Seedlings to Plant</h3>
+              {Object.values(purchasedPlants || {}).every(count => count === 0) ? (
+                <p className="text-center text-xs text-gray-500">Buy seeds from the shop.</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-3">
+                  {plantTypes.map((plantType) => {
+                    const count = purchasedPlants?.[plantType] || 0;
+                    if (count === 0) return null;
+                    return (
+                      <button
+                        key={plantType}
+                        onClick={() => onSelectPlant(selectedPlant === plantType ? null : plantType)}
+                        className={`
+                          bg-white rounded-lg border-2 transition-all duration-200
+                          flex flex-col items-center justify-center p-2
+                          w-full min-h-[120px]
+                          ${
+                            selectedPlant === plantType
+                              ? "border-fleur-green ring-2 ring-fleur-green/50 shadow-soft"
+                              : "border-gray-200 hover:border-fleur-green/50"
+                          }
+                        `}
+                        style={{ aspectRatio: "1 / 1" }}
+                      >
+                        <img
+                          src="/sprites/plants/seedling.png"
+                          alt={`${plantType} seedling`}
+                          className="w-12 h-12 object-contain pixelated mb-1"
+                        />
+                        <span className="text-xs font-semibold text-gray-700 capitalize">{plantType} seedling</span>
+                        <span className="text-xs text-gray-500">x{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Harvested plants section */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Harvested Plants</h3>
+              {Object.values(harvestedPlants || {}).every(count => count === 0) ? (
+                <p className="text-center text-xs text-gray-500">Harvest your fully grown plants.</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-3">
+                  {plantTypes.map((plantType) => {
+                    const count = harvestedPlants?.[plantType] || 0;
+                    if (count === 0) return null;
+                    return (
+                      <button
+                        key={`harvested-${plantType}`}
+                        onClick={() => onSelectHarvestedPlant?.(selectedHarvestedPlant === plantType ? null : plantType)}
+                        className={`
+                          bg-white rounded-lg border-2 transition-all duration-200
+                          flex flex-col items-center justify-center p-2
+                          w-full min-h-[120px]
+                          ${
+                            selectedHarvestedPlant === plantType
+                              ? "border-fleur-purple ring-2 ring-fleur-purple/50 shadow-soft"
+                              : "border-gray-200 hover:border-fleur-purple/50"
+                          }
+                        `}
+                        style={{ aspectRatio: "1 / 1" }}
+                      >
+                        <img
+                          src={`/sprites/plants/${plantType}_2.png`}
+                          alt={`${plantType} harvested`}
+                          className="w-12 h-12 object-contain pixelated mb-1"
+                        />
+                        <span className="text-xs font-semibold text-gray-700 capitalize">{plantType}</span>
+                        <span className="text-xs text-gray-500">x{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Sell button - shows when harvested plant is selected */}
+            {selectedHarvestedPlant && (
+              <div className="mt-4 pt-4 border-t border-fleur-purple/30">
+                <button
+                  onClick={() => onSellPlant?.(selectedHarvestedPlant)}
+                  className="w-full py-3 px-4 rounded-lg font-semibold transition-all duration-200 bg-fleur-purple text-white hover:bg-fleur-purple/90 shadow-soft"
+                >
+                  Sell {selectedHarvestedPlant.charAt(0).toUpperCase() + selectedHarvestedPlant.slice(1)} ({harvestPrice || 60} coins)
+                </button>
               </div>
             )}
           </div>
         ) : (
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-3">
-              {/* Land item */}
               <button
                 onClick={() => setSelectedShopItem(selectedShopItem === "land" ? null : "land")}
                 className={`
-                  aspect-square bg-white rounded-lg border-2 transition-all duration-200
+                  bg-white rounded-lg border-2 transition-all duration-200
                   flex flex-col items-center justify-center p-2
+                  w-full min-h-[120px]
                   ${
                     selectedShopItem === "land"
                       ? "border-fleur-green ring-2 ring-fleur-green/50 shadow-soft"
                       : "border-gray-200 hover:border-fleur-green/50"
                   }
                 `}
+                style={{ aspectRatio: "1 / 1" }}
               >
                 <img
                   src="/sprites/terrain/dirt.png"
@@ -156,23 +224,24 @@ export function InventoryPanel({
                   className="w-12 h-12 object-contain pixelated mb-2"
                 />
                 <span className="text-xs font-semibold text-gray-700">Land</span>
-                <span className="text-xs text-gray-500">{landPrice || 10} gems</span>
+                <span className="text-xs text-gray-500">{landPrice || 5} gems</span>
               </button>
               
-              {/* Plant items */}
               {plantTypes.map((plantType) => (
                 <button
                   key={plantType}
                   onClick={() => setSelectedShopItem(selectedShopItem === plantType ? null : plantType)}
                   className={`
-                    aspect-square bg-white rounded-lg border-2 transition-all duration-200
+                    bg-white rounded-lg border-2 transition-all duration-200
                     flex flex-col items-center justify-center p-2
+                    w-full min-h-[120px]
                     ${
                       selectedShopItem === plantType
                         ? "border-fleur-green ring-2 ring-fleur-green/50 shadow-soft"
                         : "border-gray-200 hover:border-fleur-green/50"
                     }
                   `}
+                  style={{ aspectRatio: "1 / 1" }}
                 >
                   <img
                     src={`/sprites/plants/${plantType}_2.png`}
@@ -180,55 +249,45 @@ export function InventoryPanel({
                     className="w-12 h-12 object-contain pixelated mb-2"
                   />
                   <span className="text-xs font-semibold text-gray-700 capitalize">{plantType}</span>
-                  <span className="text-xs text-gray-500">{plantPrice || 50} coins</span>
+                  <span className="text-xs text-gray-500">{plantPrices?.[plantType] || 0} coins</span>
                 </button>
               ))}
             </div>
-            
-            {/* Buy button - shows when shop item is selected */}
             {selectedShopItem && (
               <div className="mt-4 pt-4 border-t border-fleur-green/30">
                 {selectedShopItem === "land" ? (
                   <button
                     onClick={() => {
-                      if (onSelectLand && canAffordLand) {
-                        onSelectLand();
-                        setSelectedShopItem(null);
-                      }
+                      onSelectLand?.();
+                      setSelectedShopItem(null);
                     }}
                     disabled={!canAffordLand}
-                    className={`
-                      w-full py-3 px-4 rounded-lg font-semibold transition-all duration-200
-                      ${
-                        canAffordLand
-                          ? "bg-fleur-green text-white hover:bg-fleur-green/90 shadow-soft"
-                          : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                      }
-                    `}
+                    className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-200 ${
+                      canAffordLand
+                        ? "bg-fleur-green text-white hover:bg-fleur-green/90 shadow-soft"
+                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    }`}
                   >
-                    {canAffordLand ? `Buy Land (${landPrice || 10} gems)` : `Not enough gems (need ${landPrice || 10})`}
+                    {canAffordLand ? `Buy Land (${landPrice || 5} gems)` : `Not enough gems (need ${landPrice || 5})`}
                   </button>
                 ) : (
                   <button
                     onClick={() => {
-                      if (onBuyPlant && canAffordPlant && selectedShopItem && plantTypes.includes(selectedShopItem as PlantType)) {
-                        onBuyPlant(selectedShopItem as PlantType);
+                      if (selectedShopItem && plantTypes.includes(selectedShopItem as PlantType)) {
+                        onBuyPlant?.(selectedShopItem as PlantType);
                         setSelectedShopItem(null);
                       }
                     }}
                     disabled={!canAffordPlant}
-                    className={`
-                      w-full py-3 px-4 rounded-lg font-semibold transition-all duration-200
-                      ${
-                        canAffordPlant
-                          ? "bg-fleur-green text-white hover:bg-fleur-green/90 shadow-soft"
-                          : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                      }
-                    `}
+                    className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-200 ${
+                      canAffordPlant
+                        ? "bg-fleur-green text-white hover:bg-fleur-green/90 shadow-soft"
+                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    }`}
                   >
                     {canAffordPlant && selectedShopItem && plantTypes.includes(selectedShopItem as PlantType)
-                      ? `Buy ${(selectedShopItem as PlantType).charAt(0).toUpperCase() + (selectedShopItem as PlantType).slice(1)} (${plantPrice || 50} coins)`
-                      : `Not enough coins (need ${plantPrice || 50})`
+                      ? `Buy ${(selectedShopItem as PlantType).charAt(0).toUpperCase() + (selectedShopItem as PlantType).slice(1)} (${plantPrices?.[selectedShopItem as PlantType] || 0} coins)`
+                      : `Not enough coins (need ${selectedShopItem && plantPrices ? plantPrices[selectedShopItem as PlantType] || 0 : 0})`
                     }
                   </button>
                 )}

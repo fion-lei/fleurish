@@ -31,11 +31,12 @@ interface GardenGridProps {
   selectedPlant: PlantType | null;
   selectedLand?: boolean;
   onBuyDirt?: (row: number, col: number) => void;
-  dirtPrice?: number;
+  onHarvestPlant?: (row: number, col: number) => void;
+  landPrice?: number;
   gems?: number;
 }
 
-export function GardenGrid({ garden, onCellClick, selectedPlant, selectedLand, onBuyDirt, dirtPrice, gems }: GardenGridProps) {
+export function GardenGrid({ garden, onCellClick, selectedPlant, selectedLand, onBuyDirt, onHarvestPlant, landPrice, gems }: GardenGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [tileSize, setTileSize] = useState<number>(32);
 
@@ -112,7 +113,8 @@ export function GardenGrid({ garden, onCellClick, selectedPlant, selectedLand, o
               selectedLand={selectedLand}
               tileSize={tileSize}
               onBuyDirt={onBuyDirt}
-              dirtPrice={dirtPrice}
+              onHarvestPlant={onHarvestPlant}
+              landPrice={landPrice}
               gems={gems}
             />
           ))
@@ -131,21 +133,33 @@ interface GardenCellProps {
   selectedLand?: boolean;
   tileSize: number;
   onBuyDirt?: (row: number, col: number) => void;
-  dirtPrice?: number;
+  onHarvestPlant?: (row: number, col: number) => void;
+  landPrice?: number;
   gems?: number;
 }
 
-function GardenCell({ cell, row, col, onClick, selectedPlant, selectedLand, tileSize, onBuyDirt, dirtPrice, gems }: GardenCellProps) {
+function GardenCell({ cell, row, col, onClick, selectedPlant, selectedLand, tileSize, onBuyDirt, onHarvestPlant, landPrice, gems }: GardenCellProps) {
+  const [showHarvestBtn, setShowHarvestBtn] = useState(false);
   const canPlant = cell.terrain === "dirt" && !cell.plant && selectedPlant !== null;
   const canHarvest = cell.plant && cell.plant.stage === 2;
-  const canBuyDirt = cell.terrain === "MM_grass" && selectedLand && onBuyDirt && dirtPrice && gems !== undefined && gems >= dirtPrice;
+  const canBuyDirt = cell.terrain === "MM_grass" && selectedLand && onBuyDirt && landPrice && gems !== undefined && gems >= landPrice;
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (canBuyDirt && onBuyDirt) {
+    if (canHarvest) {
+      setShowHarvestBtn(!showHarvestBtn);
+    } else if (canBuyDirt && onBuyDirt) {
       onBuyDirt(row, col);
     } else {
       onClick();
+    }
+  };
+
+  const handleHarvest = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onHarvestPlant) {
+      onHarvestPlant(row, col);
+      setShowHarvestBtn(false);
     }
   };
 
@@ -175,7 +189,7 @@ function GardenCell({ cell, row, col, onClick, selectedPlant, selectedLand, tile
           : canHarvest
           ? "Click to harvest"
           : canBuyDirt
-          ? `Click to buy dirt for ${dirtPrice} gems`
+          ? `Click to buy land for ${landPrice} gems`
           : cell.plant
           ? `${cell.plant.type} - Stage ${cell.plant.stage + 1}`
           : ""
@@ -198,19 +212,35 @@ function GardenCell({ cell, row, col, onClick, selectedPlant, selectedLand, tile
       
       {/* Plant overlay */}
       {cell.plant && (
-        <img
-          src={getPlantSprite(cell.plant)}
-          alt={`${cell.plant.type} stage ${cell.plant.stage}`}
-          className="absolute inset-0 pixelated z-10"
-          style={{
-            width: `${tileSize}px`,
-            height: `${tileSize}px`,
-            objectFit: "fill",
-            display: "block",
-            margin: 0,
-            padding: 0,
-          }}
-        />
+        <>
+          <img
+            src={getPlantSprite(cell.plant)}
+            alt={`${cell.plant.type} stage ${cell.plant.stage}`}
+            className="absolute inset-0 pixelated z-10"
+            style={{
+              width: `${tileSize}px`,
+              height: `${tileSize}px`,
+              objectFit: "fill",
+              display: "block",
+              margin: 0,
+              padding: 0,
+            }}
+          />
+          
+          {/* Harvest button for mature plants */}
+          {canHarvest && showHarvestBtn && (
+            <button
+              onClick={handleHarvest}
+              className="absolute inset-0 z-20 bg-fleur-green/80 hover:bg-fleur-green flex items-center justify-center text-white font-semibold text-xs transition-colors"
+              style={{
+                width: `${tileSize}px`,
+                height: `${tileSize}px`,
+              }}
+            >
+              Harvest
+            </button>
+          )}
+        </>
       )}
     </button>
   );

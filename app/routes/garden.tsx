@@ -16,8 +16,8 @@ export default function Garden() {
   const [garden, setGarden] = useState<GardenCell[][]>(createInitialGarden());
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [selectedPlant, setSelectedPlant] = useState<PlantType | null>(null);
-  const [gems, setGems] = useState(50);
-  const [coins, setCoins] = useState(100);
+  const [gems, setGems] = useState(0);
+  const [coins, setCoins] = useState(75);
   const [gardenName, setGardenName] = useState("Garden Name");
   const [selectedLand, setSelectedLand] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -26,8 +26,15 @@ export default function Garden() {
     purple: 0,
     yellow: 0,
   });
-  const dirtPrice = 10; // Price in gems to buy dirt - easy to change for backend integration
-  const plantPrice = 50; // Price in coins to buy plants
+  const [harvestedPlants, setHarvestedPlants] = useState<Record<PlantType, number>>({
+    pink: 0,
+    purple: 0,
+    yellow: 0,
+  });
+  const [selectedHarvestedPlant, setSelectedHarvestedPlant] = useState<PlantType | null>(null);
+  const landPrice = 5; // Price in gems to buy land
+  const plantPrices: Record<PlantType, number> = { pink: 30, yellow: 20, purple: 15 };
+  const harvestPrice = 60; // Price in coins when selling harvested plants
   
   const gardenNameInputRef = useRef<HTMLInputElement>(null);
 
@@ -74,20 +81,54 @@ export default function Garden() {
 
   const handleSelectLand = () => {
     // Toggle land selection - user must click land in shop to select it
-    if (gems >= dirtPrice) {
+    if (gems >= landPrice) {
       setSelectedLand(!selectedLand);
       setSelectedPlant(null); // Deselect plant when selecting land
     }
   };
 
   const handleBuyPlant = (plantType: PlantType) => {
-    if (coins >= plantPrice) {
+    const price = plantPrices[plantType];
+    if (coins >= price) {
       setPurchasedPlants((prev) => ({
         ...prev,
         [plantType]: (prev[plantType] || 0) + 1,
       }));
-      setCoins((prev) => prev - plantPrice);
+      setCoins((prev) => prev - price);
       // TODO: Call backend API to update inventory and deduct coins
+    }
+  };
+
+  const handleHarvestPlant = (row: number, col: number) => {
+    const cell = garden[row][col];
+    if (cell.plant && cell.plant.stage === 2) {
+      // Add to harvested plants
+      setHarvestedPlants((prev) => ({
+        ...prev,
+        [cell.plant!.type]: (prev[cell.plant!.type] || 0) + 1,
+      }));
+      
+      // Remove from garden
+      const newGarden = garden.map((r) => [...r]);
+      newGarden[row][col] = {
+        ...cell,
+        plant: null,
+      };
+      setGarden(newGarden);
+    }
+  };
+
+  const handleSellPlant = (plantType: PlantType) => {
+    if (harvestedPlants[plantType] > 0) {
+      setHarvestedPlants((prev) => ({
+        ...prev,
+        [plantType]: prev[plantType] - 1,
+      }));
+      setCoins((prev) => prev + harvestPrice);
+      if (selectedHarvestedPlant === plantType && harvestedPlants[plantType] === 1) {
+        setSelectedHarvestedPlant(null);
+      }
+      // TODO: Call backend API to update inventory and add coins
     }
   };
 
@@ -106,19 +147,19 @@ export default function Garden() {
     const cell = garden[row][col];
     
     // Only allow buying dirt on MM_grass cells when land is selected
-    if (cell.terrain === "MM_grass" && selectedLand && gems >= dirtPrice) {
+    if (cell.terrain === "MM_grass" && selectedLand && gems >= landPrice) {
       const newGarden = garden.map((r) => [...r]);
       newGarden[row][col] = {
         ...cell,
         terrain: "dirt",
       };
       setGarden(newGarden);
-      setGems((prev) => prev - dirtPrice);
+      setGems((prev) => prev - landPrice);
       setSelectedLand(false); // Deselect after placing land
       
       // TODO: Call backend API to update garden and deduct gems
       // Example: await updateGardenCell(row, col, "dirt");
-      // Example: await updateCurrency({ gems: gems - dirtPrice });
+      // Example: await updateCurrency({ gems: gems - landPrice });
     }
   };
 
@@ -214,7 +255,8 @@ export default function Garden() {
                 selectedPlant={selectedPlant}
                 selectedLand={selectedLand}
                 onBuyDirt={handleBuyDirt}
-                dirtPrice={dirtPrice}
+                onHarvestPlant={handleHarvestPlant}
+                landPrice={landPrice}
                 gems={gems}
               />
             </div>
@@ -228,12 +270,17 @@ export default function Garden() {
                 selectedPlant={selectedPlant}
                 onSelectLand={handleSelectLand}
                 selectedLand={selectedLand}
-                landPrice={dirtPrice}
+                landPrice={landPrice}
                 gems={gems}
                 onBuyPlant={handleBuyPlant}
-                plantPrice={plantPrice}
+                plantPrices={plantPrices}
                 coins={coins}
                 purchasedPlants={purchasedPlants}
+                harvestedPlants={harvestedPlants}
+                onSellPlant={handleSellPlant}
+                selectedHarvestedPlant={selectedHarvestedPlant}
+                onSelectHarvestedPlant={setSelectedHarvestedPlant}
+                harvestPrice={harvestPrice}
               />
             </div>
           )}
@@ -249,12 +296,17 @@ export default function Garden() {
                   selectedPlant={selectedPlant}
                   onSelectLand={handleSelectLand}
                   selectedLand={selectedLand}
-                  landPrice={dirtPrice}
+                  landPrice={landPrice}
                   gems={gems}
                   onBuyPlant={handleBuyPlant}
-                  plantPrice={plantPrice}
+                  plantPrices={plantPrices}
                   coins={coins}
                   purchasedPlants={purchasedPlants}
+                  harvestedPlants={harvestedPlants}
+                  onSellPlant={handleSellPlant}
+                  selectedHarvestedPlant={selectedHarvestedPlant}
+                  onSelectHarvestedPlant={setSelectedHarvestedPlant}
+                  harvestPrice={harvestPrice}
                   onClose={() => setIsInventoryOpen(false)}
                 />
               </div>

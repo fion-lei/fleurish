@@ -8,6 +8,8 @@ import { useAuth } from "~/components/AuthContext";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+const statusOrder = { new: 0, in_progress: 1, completed: 2 };
+
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Community Tasks - Fleurish" }, { name: "description", content: "Community tasks" }];
 }
@@ -58,7 +60,13 @@ export default function CommunityTasks() {
           points: task.taskPoints,
           status: task.status,
         }));
-        setTasks(mappedTasks);
+
+        // Sort tasks: new, in_progress, then completed
+        const sortedTasks = mappedTasks.sort((a: Task, b: Task) => {
+          return statusOrder[a.status as keyof typeof statusOrder] - statusOrder[b.status as keyof typeof statusOrder];
+        });
+
+        setTasks(sortedTasks);
         setError(null);
       } catch (err) {
         console.error("Error fetching tasks:", err);

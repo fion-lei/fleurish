@@ -54,10 +54,10 @@ export default function TaskDetails({ task, showButton, buttonLabel, onAccept, i
       {showButton && (
         <button
           onClick={() => onAccept?.(task.id)}
-          disabled={isAccepting || task.status !== "new"}
+          disabled={isAccepting}
           className="mt-3 self-center px-4 py-2 bg-fleur-green text-white text-sm rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isAccepting ? "Accepting..." : buttonLabel}
+          {isAccepting ? "Processing..." : buttonLabel}
         </button>
       )}
     </div>

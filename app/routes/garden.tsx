@@ -59,7 +59,6 @@ export default function Garden() {
   const [gardenId, setGardenId] = useState<string | null>(null);
   const [hasUnsavedNameChanges, setHasUnsavedNameChanges] = useState(false);
   const [nameSaveStatus, setNameSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [debugInfo, setDebugInfo] = useState<string>("");
   const { user, refreshUser } = useAuth();
   const [garden, setGarden] = useState<GardenCell[][]>(createInitialGarden());
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
@@ -143,7 +142,6 @@ export default function Garden() {
 
           if (userGarden) {
             setUserGardenId(userGarden.gardenMongoId || gardenId);
-            setGardenName(userGarden.name || "My Garden");
 
             // Use plots array from garden data
             const plots = userGarden.plots || [];
@@ -410,40 +408,20 @@ export default function Garden() {
   };
 
   const handleSaveGardenName = async () => {
-    console.log("Save button clicked!", { gardenId, gardenName, hasUnsavedNameChanges });
-    setDebugInfo(`🔘 Button clicked!\nGarden ID: ${gardenId || 'null'}\nGarden Name: ${gardenName}\nHas Unsaved: ${hasUnsavedNameChanges}`);
-    
-    if (!gardenId) {
-      setDebugInfo(`✗ Error: No garden ID found!\nCannot save without a garden ID.`);
-      return;
-    }
-    
-    if (!gardenName.trim()) {
-      setDebugInfo(`✗ Error: Garden name is empty!`);
-      return;
-    }
-    
-    if (!hasUnsavedNameChanges) {
-      setDebugInfo(`✗ Error: No unsaved changes detected!`);
-      return;
-    }
-    
+    if (!gardenId) return;
+    if (!gardenName.trim()) return;
+    if (!hasUnsavedNameChanges) return;
+
     if (gardenId && gardenName.trim() && hasUnsavedNameChanges) {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-      const url = `${API_BASE_URL}gardens/${gardenId}/name`;
-      setDebugInfo(`📡 Sending request...\nURL: ${url}\nGarden ID: ${gardenId}\nNew Name: ${gardenName}`);
       setNameSaveStatus("saving");
       try {
         const updated = await updateGardenName(gardenId, gardenName.trim());
-        console.log("Garden name updated successfully");
         setGardenName(updated);
         setHasUnsavedNameChanges(false);
         setNameSaveStatus("saved");
-        setDebugInfo(prev => `${prev ? prev + "\n" : ""}✓ Saved successfully!\nURL: ${url}\nName: ${gardenName}`);
       } catch (error) {
         console.error("Failed to update garden name:", error);
         setNameSaveStatus("error");
-        setDebugInfo(prev => `${prev ? prev + "\n" : ""}✗ Error: ${error instanceof Error ? error.message : 'Unknown error'}\nURL: ${url}`);
       }
     }
   };
@@ -457,7 +435,6 @@ export default function Garden() {
       setGardenName(e.target.value);
       setHasUnsavedNameChanges(true);
       setNameSaveStatus("idle");
-      setDebugInfo(`Changed name to: "${e.target.value}"\nHas unsaved changes: true\nCurrent gardenId: ${gardenId || 'null'}`);
     }
   };
 
@@ -473,9 +450,6 @@ export default function Garden() {
     if (!isVisiting) {
       if (user?.gardenId) {
         setGardenId(user.gardenId);
-        setDebugInfo((prev) => `${prev ? prev + "\n" : ""}User gardenId from /users/me: ${user.gardenId}`);
-      } else if (user) {
-        setDebugInfo((prev) => `${prev ? prev + "\n" : ""}No gardenId found on /users/me response`);
       }
     }
   }, [user, isVisiting]);
@@ -496,10 +470,9 @@ export default function Garden() {
             setGardenName(name);
             setHasUnsavedNameChanges(false);
             setNameSaveStatus("saved");
-            setDebugInfo((prev) => `${prev ? prev + "\n" : ""}Fetched gardenName from /gardens/${gardenId}: ${name}`);
           }
         } catch (e) {
-          setDebugInfo((prev) => `${prev ? prev + "\n" : ""}Failed to fetch gardenName: ${e instanceof Error ? e.message : 'Unknown error'}`);
+          // ignore fetch error for name
         }
       }
     };
@@ -629,13 +602,6 @@ export default function Garden() {
           )}
         </div>
 
-        {/* Debug Info Display */}
-        {debugInfo && (
-          <div className="mx-auto max-w-2xl mb-4 p-4 bg-gray-800 text-white rounded-lg text-sm font-mono whitespace-pre-wrap">
-            <div className="font-bold mb-2">🔍 Debug Info:</div>
-            {debugInfo}
-          </div>
-        )}
         
         {/* Selected plant indicator */}
         {selectedPlant && (

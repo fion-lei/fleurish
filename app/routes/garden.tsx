@@ -5,21 +5,18 @@ import { GardenGrid, createInitialGarden, type GardenCell, type PlantType } from
 import { InventoryPanel } from "../components/InventoryPanel";
 import { Navbar } from "../components/Navbar";
 import { VisitGardenModal } from "../components/VisitGardenModal";
+import { useAuth } from "../components/AuthContext";
 import type { Route } from "./+types/garden";
 
 export function meta({}: Route.MetaArgs) {
-  return [
-    { title: "Garden - Fleurish" },
-    { name: "description", content: "Your garden" },
-  ];
+  return [{ title: "Garden - Fleurish" }, { name: "description", content: "Your garden" }];
 }
 
 export default function Garden() {
+  const { user } = useAuth();
   const [garden, setGarden] = useState<GardenCell[][]>(createInitialGarden());
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [selectedPlant, setSelectedPlant] = useState<PlantType | null>(null);
-  const [gems, setGems] = useState(0);
-  const [coins, setCoins] = useState(75);
   const [gardenName, setGardenName] = useState("Garden Name");
   const [selectedLand, setSelectedLand] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -41,15 +38,15 @@ export default function Garden() {
   const landPrice = 5; // Price in gems to buy land
   const plantPrices: Record<PlantType, number> = { pink: 30, yellow: 20, purple: 15 };
   const harvestPrice = 60; // Price in coins when selling harvested plants
-  
+
   // User's community affiliations - easily replaceable with backend user data
   const userCommunities = ["Downtown Gardeners", "Organic Growers"];
-  
+
   const gardenNameInputRef = useRef<HTMLInputElement>(null);
 
   const handleCellClick = (row: number, col: number) => {
     const cell = garden[row][col];
-    
+
     // If there's a selected plant and the cell is dirt with no plant, plant it
     if (selectedPlant && cell.terrain === "dirt" && !cell.plant && purchasedPlants[selectedPlant] > 0) {
       const newGarden = garden.map((r) => [...r]);
@@ -75,8 +72,7 @@ export default function Garden() {
         plant: null,
       };
       setGarden(newGarden);
-      // Add coins when harvesting (you can adjust this logic)
-      setCoins((prev) => prev + 10);
+      // TODO: Update user's coins in backend when harvesting
     }
   };
 
@@ -117,7 +113,8 @@ export default function Garden() {
 
   const handleSelectLand = () => {
     // Toggle land selection - user must click land in shop to select it
-    if (gems >= landPrice) {
+    const userGems = user?.gems ?? 0;
+    if (userGems >= landPrice) {
       setSelectedLand(!selectedLand);
       setSelectedPlant(null); // Deselect plant when selecting land
     }
@@ -125,12 +122,12 @@ export default function Garden() {
 
   const handleBuyPlant = (plantType: PlantType) => {
     const price = plantPrices[plantType];
-    if (coins >= price) {
+    const userCoins = user?.coins ?? 0;
+    if (userCoins >= price) {
       setPurchasedPlants((prev) => ({
         ...prev,
         [plantType]: (prev[plantType] || 0) + 1,
       }));
-      setCoins((prev) => prev - price);
       // TODO: Call backend API to update inventory and deduct coins
     }
   };
@@ -143,7 +140,7 @@ export default function Garden() {
         ...prev,
         [cell.plant!.type]: (prev[cell.plant!.type] || 0) + 1,
       }));
-      
+
       // Remove from garden
       const newGarden = garden.map((r) => [...r]);
       newGarden[row][col] = {
@@ -160,7 +157,6 @@ export default function Garden() {
         ...prev,
         [plantType]: prev[plantType] - 1,
       }));
-      setCoins((prev) => prev + harvestPrice);
       if (selectedHarvestedPlant === plantType && harvestedPlants[plantType] === 1) {
         setSelectedHarvestedPlant(null);
       }
@@ -181,18 +177,18 @@ export default function Garden() {
 
   const handleBuyDirt = (row: number, col: number) => {
     const cell = garden[row][col];
-    
+    const userGems = user?.gems ?? 0;
+
     // Only allow buying dirt on MM_grass cells when land is selected
-    if (cell.terrain === "MM_grass" && selectedLand && gems >= landPrice) {
+    if (cell.terrain === "MM_grass" && selectedLand && userGems >= landPrice) {
       const newGarden = garden.map((r) => [...r]);
       newGarden[row][col] = {
         ...cell,
         terrain: "dirt",
       };
       setGarden(newGarden);
-      setGems((prev) => prev - landPrice);
       setSelectedLand(false); // Deselect after placing land
-      
+
       // TODO: Call backend API to update garden and deduct gems
       // Example: await updateGardenCell(row, col, "dirt");
       // Example: await updateCurrency({ gems: gems - landPrice });
@@ -202,7 +198,7 @@ export default function Garden() {
   return (
     <div className="h-screen bg-[#FFF9EB] flex flex-col overflow-hidden">
       <Navbar />
-      
+
       <main className="flex-1 pt-[73.6px] pb-20 px-4 sm:px-6 lg:px-8 flex flex-col overflow-hidden">
         {/* Garden Name - Editable (right under navbar) */}
         <div className="pt-6 pb-4 flex items-center justify-center gap-2">
@@ -213,13 +209,7 @@ export default function Garden() {
             onChange={(e) => !isVisiting && setGardenName(e.target.value)}
             onBlur={() => setIsEditingName(false)}
             disabled={isVisiting}
-            className={`text-2xl md:text-3xl font-bold text-black text-center bg-transparent border-2 rounded-lg outline-none focus:outline-none focus:ring-2 focus:ring-fleur-green/30 pb-2 px-4 py-2 transition-all duration-200 ${
-              isVisiting
-                ? "border-dashed border-gray-300 cursor-not-allowed"
-                : isEditingName
-                ? "border-fleur-green border-solid focus:border-fleur-green/70"
-                : "border-dashed border-fleur-green/40 hover:border-fleur-green/60"
-            }`}
+            className={`text-2xl md:text-3xl font-bold text-black text-center bg-transparent border-2 rounded-lg outline-none focus:outline-none focus:ring-2 focus:ring-fleur-green/30 pb-2 px-4 py-2 transition-all duration-200 ${isVisiting ? "border-dashed border-gray-300 cursor-not-allowed" : isEditingName ? "border-fleur-green border-solid focus:border-fleur-green/70" : "border-dashed border-fleur-green/40 hover:border-fleur-green/60"}`}
             placeholder="Click to edit garden name"
           />
           {!isVisiting && (
@@ -246,7 +236,7 @@ export default function Garden() {
             </button>
           )}
         </div>
-        
+
         {/* Selected plant indicator */}
         {selectedPlant && (
           <div className="text-center mb-4">
@@ -256,13 +246,11 @@ export default function Garden() {
                 alt={selectedPlant}
                 className="w-5 h-5 object-contain pixelated"
               />
-              <span className="text-sm font-semibold text-gray-700 capitalize">
-                Selected: {selectedPlant} - Click on dirt to plant
-              </span>
+              <span className="text-sm font-semibold text-gray-700 capitalize">Selected: {selectedPlant} - Click on dirt to plant</span>
             </span>
           </div>
         )}
-        
+
         {/* Selected land indicator */}
         {selectedLand && (
           <div className="text-center mb-4">
@@ -272,9 +260,7 @@ export default function Garden() {
                 alt="Land"
                 className="w-5 h-5 object-contain pixelated"
               />
-              <span className="text-sm font-semibold text-gray-700">
-                Land selected - Click on a grass to place land
-              </span>
+              <span className="text-sm font-semibold text-gray-700">Land selected - Click on a grass to place land</span>
             </span>
           </div>
         )}
@@ -284,7 +270,7 @@ export default function Garden() {
           {/* Garden Grid */}
           <div
             className={`
-              flex-shrink-0
+              shrink-0
               bg-transparent flex items-center justify-center
               ${isInventoryOpen ? "w-full lg:w-2/3 h-full" : "w-full h-full"}
             `}
@@ -298,24 +284,24 @@ export default function Garden() {
                 onBuyDirt={handleBuyDirt}
                 onHarvestPlant={handleHarvestPlant}
                 landPrice={landPrice}
-                gems={gems}
+                gems={user?.gems ?? 0}
               />
             </div>
           </div>
 
           {/* Inventory Panel */}
           {isInventoryOpen && (
-            <div className="hidden lg:flex w-1/3 flex-shrink-0 h-full min-w-0">
+            <div className="hidden lg:flex w-1/3 shrink-0 h-full min-w-0">
               <InventoryPanel
                 onSelectPlant={setSelectedPlant}
                 selectedPlant={selectedPlant}
                 onSelectLand={handleSelectLand}
                 selectedLand={selectedLand}
                 landPrice={landPrice}
-                gems={gems}
+                gems={user?.gems ?? 0}
                 onBuyPlant={handleBuyPlant}
                 plantPrices={plantPrices}
-                coins={coins}
+                coins={user?.coins ?? 0}
                 purchasedPlants={purchasedPlants}
                 harvestedPlants={harvestedPlants}
                 onSellPlant={handleSellPlant}
@@ -338,10 +324,10 @@ export default function Garden() {
                   onSelectLand={handleSelectLand}
                   selectedLand={selectedLand}
                   landPrice={landPrice}
-                  gems={gems}
+                  gems={user?.gems ?? 0}
                   onBuyPlant={handleBuyPlant}
                   plantPrices={plantPrices}
-                  coins={coins}
+                  coins={user?.coins ?? 0}
                   purchasedPlants={purchasedPlants}
                   harvestedPlants={harvestedPlants}
                   onSellPlant={handleSellPlant}
@@ -359,8 +345,8 @@ export default function Garden() {
       <GardenFooter
         onBackpackClick={handleBackpackClick}
         onCommunityClick={handleCommunityClick}
-        gems={gems}
-        coins={coins}
+        gems={user?.gems ?? 0}
+        coins={user?.coins ?? 0}
         isVisiting={isVisiting}
         onReturnHome={handleReturnHome}
       />

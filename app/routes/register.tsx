@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { AuthLayout } from "../components/AuthLayout";
 import { FormInput } from "../components/FormInput";
+import { PasswordInput } from "../components/PasswordInput";
 import { SubmitButton } from "../components/SubmitButton";
 import { useAuth } from "../components/AuthContext";
 import type { Route } from "./+types/register";
@@ -18,6 +19,18 @@ export default function Register() {
   const { register } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordMatchError, setPasswordMatchError] = useState<string | null>(null);
+
+  // Check if passwords match in real-time
+  const checkPasswordMatch = (pwd: string, confirmPwd: string) => {
+    if (confirmPwd && pwd !== confirmPwd) {
+      setPasswordMatchError("Passwords do not match");
+    } else {
+      setPasswordMatchError(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -72,10 +85,9 @@ export default function Register() {
             disabled={isSubmitting}
           />
 
-          <FormInput
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             placeholder="Password"
             required
             aria-label="Password"
@@ -84,10 +96,9 @@ export default function Register() {
             disabled={isSubmitting}
           />
 
-          <FormInput
+          <PasswordInput
             id="confirmPassword"
             name="confirmPassword"
-            type="password"
             placeholder="Confirm Password"
             required
             aria-label="Confirm password"

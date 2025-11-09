@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchGardenById } from "../api/gardens";
+import { fetchGardenById, updateGardenName, fetchGardenName } from "../api/gardens";
 import { GardenFooter } from "../components/GardenFooter";
 import { GardenGrid, createInitialGarden, type GardenCell, type PlantType } from "../components/GardenGrid";
 import { InventoryPanel } from "../components/InventoryPanel";
 import { Navbar } from "../components/Navbar";
-import { VisitGardenModal } from "../components/VisitGardenModal";
 import { useAuth } from "../components/AuthContext";
+import { VisitGardenModal } from "../components/VisitGardenModal";
 import type { Route } from "./+types/garden";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -36,11 +36,24 @@ function createGardenFromPlots(plots: any[]): GardenCell[][] {
         // This plot exists, make it dirt
         baseGarden[arrayRow][arrayCol].terrain = "dirt";
 
-        // Add plant if it exists
+        // Add plant if it exists on the plot
         if (plot.plant) {
-          // Fetch plant data and set it
-          // For now, we'll need to handle this separately
-          baseGarden[arrayRow][arrayCol].plant = null; // Will be populated by separate plant fetch
+          const plantData = plot.plant;
+          const plantTypeName = plantData.plantType?.plantName?.toLowerCase() as PlantType;
+
+          // Use growthStage from backend - it's the source of truth
+          const stage = (plantData.growthStage ?? 0) as 0 | 1 | 2;
+          const growth = plantData.growth || 0;
+
+          if (plantTypeName) {
+            // Create a new plant object every time to force React to detect changes
+            baseGarden[arrayRow][arrayCol].plant = {
+              type: plantTypeName,
+              stage: stage,
+              // Use timestamp to force NEW object reference every time
+              _id: `${plantData._id || plantData.plantMongoId}-stage${stage}-growth${Math.floor(growth)}-${Date.now()}`,
+            };
+          }
         }
       }
     }
@@ -54,11 +67,16 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Garden() {
+  const [gardenName, setGardenName] = useState("");
+  const [showNamePlaceholder, setShowNamePlaceholder] = useState(false);
+  const [gardenId, setGardenId] = useState<string | null>(null);
+  const [hasUnsavedNameChanges, setHasUnsavedNameChanges] = useState(false);
+  const [nameSaveStatus, setNameSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const { user, refreshUser } = useAuth();
   const [garden, setGarden] = useState<GardenCell[][]>(createInitialGarden());
+  const [gardenRenderKey, setGardenRenderKey] = useState(0); // Force re-render counter
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [selectedPlant, setSelectedPlant] = useState<PlantType | null>(null);
-  const [gardenName, setGardenName] = useState("Garden Name");
   const [userGardenId, setUserGardenId] = useState<string | null>(null);
   const [selectedLand, setSelectedLand] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -71,6 +89,8 @@ export default function Garden() {
   const [isLoadingGarden, setIsLoadingGarden] = useState(false);
   const [plantPrices, setPlantPrices] = useState<Partial<Record<PlantType, number>>>({});
   const [plantTypeIds, setPlantTypeIds] = useState<Partial<Record<PlantType, string>>>({});
+  const [plotsData, setPlotsData] = useState<any[]>([]); // Store plot data with IDs
+  const [inventoryPlants, setInventoryPlants] = useState<any[]>([]); // Store full plant objects from inventory
   const landPrice = 5; // Price in gems to buy land
   const harvestPrice = 60; // Price in coins when selling harvested plants
 
@@ -137,11 +157,15 @@ export default function Garden() {
           const userGarden = gardenResult.data;
 
           if (userGarden) {
-            setUserGardenId(userGarden.gardenMongoId || gardenId);
-            setGardenName(userGarden.name || "My Garden");
+            // Ensure gardenMongoId is a string, not an object
+            const gardenMongoId = typeof userGarden.gardenMongoId === "string" ? userGarden.gardenMongoId : (userGarden.gardenMongoId as any)?._id || (userGarden.gardenMongoId as any)?.toString() || gardenId;
+            setUserGardenId(gardenMongoId);
 
             // Use plots array from garden data
             const plots = userGarden.plots || [];
+
+            // Store plots data
+            setPlotsData(plots);
 
             // Convert plots to garden grid
             const newGarden = createGardenFromPlots(plots);
@@ -160,11 +184,19 @@ export default function Garden() {
   const refetchGarden = async () => {
     if (!user?.gardenId || !userGardenId) return;
 
+    // Ensure userGardenId is a string, not an object
+    const gardenIdStr = typeof userGardenId === "string" ? userGardenId : (userGardenId as any)?._id || (userGardenId as any)?.toString();
+
+    if (!gardenIdStr) return;
+
     try {
       const token = localStorage.getItem("auth_token");
-      const gardenResponse = await fetch(`${API_BASE_URL}gardens/${userGardenId}`, {
+      // Add cache-busting to ensure we get fresh data
+      const gardenResponse = await fetch(`${API_BASE_URL}gardens/${gardenIdStr}?t=${Date.now()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
         },
       });
 
@@ -172,8 +204,13 @@ export default function Garden() {
         const gardenResult = await gardenResponse.json();
         const userGarden = gardenResult.data;
         const plots = userGarden?.plots || [];
+
+        // Store plots data
+        setPlotsData(plots);
+
         const newGarden = createGardenFromPlots(plots);
         setGarden(newGarden);
+        setGardenRenderKey((prev) => prev + 1); // Force component re-render
       }
     } catch (error) {
       console.error("Failed to refetch garden:", error);
@@ -196,15 +233,19 @@ export default function Garden() {
         const result = await response.json();
         const plants = result.data || [];
 
+        // Store full plant objects for planting
+        setInventoryPlants(plants);
+
         const purchased: Partial<Record<PlantType, number>> = {};
         const harvested: Partial<Record<PlantType, number>> = {};
 
         plants.forEach((plant: any) => {
           const plantType = plant.plantType?.plantName?.toLowerCase() as PlantType;
           if (plantType) {
-            if (plant.growth === 0) {
+            // Use growthStage (0, 1, 2) not growth (which is 0-100)
+            if (plant.growthStage === 0) {
               purchased[plantType] = (purchased[plantType] || 0) + 1;
-            } else if (plant.growth === 2) {
+            } else if (plant.growthStage === 2) {
               harvested[plantType] = (harvested[plantType] || 0) + 1;
             }
           }
@@ -224,35 +265,211 @@ export default function Garden() {
     }
   }, [user?.id, plantPrices]);
 
-  const handleCellClick = (row: number, col: number) => {
+  // Growth system polling
+  useEffect(() => {
+    if (!user?.id || isVisiting) return;
+
+    const pollGrowthUpdates = async () => {
+      try {
+        const token = localStorage.getItem("auth_token");
+        const response = await fetch(`${API_BASE_URL}growth/update/${user.id}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+
+          if (result.plantsGrowthUpdates && result.plantsGrowthUpdates.length > 0) {
+            // Update garden state directly using the growth data
+            setGarden((prevGarden) => {
+              const newGarden = prevGarden.map((row) => row.map((cell) => ({ ...cell })));
+
+              // Update each plant that grew
+              result.plantsGrowthUpdates.forEach((update: any) => {
+                // Find the cell with this plant
+                for (let row = 0; row < newGarden.length; row++) {
+                  for (let col = 0; col < newGarden[row].length; col++) {
+                    if (newGarden[row][col].plant?._id?.includes(update.plantId)) {
+                      console.log(`[Growth Poll] Updating plant at (${row},${col}) from stage ${update.oldStage} to ${update.newStage}`);
+                      newGarden[row][col] = {
+                        ...newGarden[row][col],
+                        plant: {
+                          ...newGarden[row][col].plant!,
+                          stage: update.newStage as 0 | 1 | 2,
+                          _id: `${update.plantId}-stage${update.newStage}-growth${Math.floor(update.growth)}-${Date.now()}`,
+                        },
+                      };
+                    }
+                  }
+                }
+              });
+
+              return newGarden;
+            });
+
+            setGardenRenderKey((prev) => prev + 1); // Force re-render
+            console.log("[Growth Poll] Garden updated directly from growth data");
+          } else {
+            console.log("[Growth Poll] No plants grew this time");
+          }
+        } else {
+          console.error("[Growth Poll] Response not OK:", response.status);
+        }
+      } catch (error) {
+        console.error("[Growth Poll] Error updating growth:", error);
+      }
+    };
+
+    // Check immediately on mount
+    pollGrowthUpdates();
+
+    // Then check every 15 seconds
+    const growthInterval = setInterval(pollGrowthUpdates, 15000);
+
+    // Cleanup: stop polling when component unmounts or user changes
+    return () => {
+      clearInterval(growthInterval);
+    };
+  }, [user?.id, isVisiting]);
+
+  const handleCellClick = async (row: number, col: number) => {
     const cell = garden[row][col];
 
     // If there's a selected plant and the cell is dirt with no plant, plant it
     if (selectedPlant && cell.terrain === "dirt" && !cell.plant && (purchasedPlants[selectedPlant] ?? 0) > 0) {
-      const newGarden = garden.map((r) => [...r]);
-      newGarden[row][col] = {
-        ...cell,
-        plant: {
-          type: selectedPlant,
-          stage: 0, // Start as seedling
-        },
-      };
-      setGarden(newGarden);
-      setPurchasedPlants((prev) => ({
-        ...prev,
-        [selectedPlant]: (prev[selectedPlant] ?? 0) - 1,
-      }));
-      setSelectedPlant(null); // Deselect after planting
+      try {
+        // Convert array indices to database coordinates
+        const centerRow = 2;
+        const centerCol = 2;
+        const plotRow = centerRow - row;
+        const plotCol = col - centerCol;
+
+        // Find the plot at this position
+        const plot = plotsData.find((p) => p.row === plotRow && p.column === plotCol);
+
+        if (!plot) {
+          console.error("No plot found at this position");
+          return;
+        }
+
+        // Find a plant from inventory with growthStage=0 and isPlanted=false
+        const availablePlant = inventoryPlants.find((p) => p.plantType?.plantName?.toLowerCase() === selectedPlant && p.growthStage === 0 && p.isPlanted === false);
+
+        if (!availablePlant) {
+          console.error("No available plant in inventory");
+          return;
+        }
+
+        console.log("Available plant:", availablePlant);
+        const plantId = availablePlant._id || availablePlant.plantMongoId;
+
+        if (!plantId) {
+          console.error("Plant ID not found");
+          return;
+        }
+
+        const token = localStorage.getItem("auth_token");
+
+        console.log("Updating plot:", plot._id, "with plant:", plantId);
+
+        // Update the plot with the plant ID
+        const plotResponse = await fetch(`${API_BASE_URL}plots/${plot._id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            plantId: plantId,
+          }),
+        });
+
+        console.log("Plot update response:", plotResponse.status, await plotResponse.text());
+
+        // Update the plant to isPlanted=true
+        const plantResponse = await fetch(`${API_BASE_URL}plants/${plantId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            isPlanted: true,
+          }),
+        });
+
+        console.log("Plant update response:", plantResponse.status);
+
+        if (plotResponse.ok && plantResponse.ok) {
+          setSelectedPlant(null);
+          await fetchUserInventory();
+          await refetchGarden();
+        }
+      } catch (error) {
+        console.error("Failed to plant:", error);
+      }
     }
     // If there's a mature plant (stage 2), harvest it
     else if (cell.plant && cell.plant.stage === 2) {
-      const newGarden = garden.map((r) => [...r]);
-      newGarden[row][col] = {
-        ...cell,
-        plant: null,
-      };
-      setGarden(newGarden);
-      // TODO: Update user's coins in backend when harvesting
+      try {
+        // Convert array indices to database coordinates
+        const centerRow = 2;
+        const centerCol = 2;
+        const plotRow = centerRow - row;
+        const plotCol = col - centerCol;
+
+        // Find the plot at this position
+        const plot = plotsData.find((p) => p.row === plotRow && p.column === plotCol);
+
+        if (!plot || !plot.plant) {
+          console.error("No plot or plant found at this position");
+          return;
+        }
+
+        const plantId = plot.plant._id || plot.plant.plantMongoId;
+
+        if (!plantId) {
+          console.error("Plant ID not found");
+          return;
+        }
+
+        const token = localStorage.getItem("auth_token");
+
+        // Update the plot to remove the plant (set to null)
+        const plotResponse = await fetch(`${API_BASE_URL}plots/${plot._id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            plantId: null,
+          }),
+        });
+
+        // Update the plant to isPlanted=false
+        const plantResponse = await fetch(`${API_BASE_URL}plants/${plantId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            isPlanted: false,
+          }),
+        });
+
+        if (plotResponse.ok && plantResponse.ok) {
+          // Refresh inventory and garden
+          await fetchUserInventory();
+          await refetchGarden();
+        }
+      } catch (error) {
+        console.error("Failed to harvest:", error);
+      }
     }
   };
 
@@ -276,6 +493,7 @@ export default function Garden() {
       setVisitingGardenName(gardenData.name);
       setIsVisiting(true);
       setIsInventoryOpen(false);
+      setGardenId(gardenData.id);
     } catch (error) {
       console.error("Failed to load garden:", error);
       alert("Failed to load garden. Please try again.");
@@ -348,22 +566,58 @@ export default function Garden() {
     }
   };
 
-  const handleHarvestPlant = (row: number, col: number) => {
+  const handleHarvestPlant = async (row: number, col: number) => {
     const cell = garden[row][col];
     if (cell.plant && cell.plant.stage === 2) {
-      // Add to harvested plants
-      setHarvestedPlants((prev) => ({
-        ...prev,
-        [cell.plant!.type]: (prev[cell.plant!.type] || 0) + 1,
-      }));
+      try {
+        // Convert array indices to database coordinates
+        const centerRow = 2;
+        const centerCol = 2;
+        const plotRow = centerRow - row;
+        const plotCol = col - centerCol;
 
-      // Remove from garden
-      const newGarden = garden.map((r) => [...r]);
-      newGarden[row][col] = {
-        ...cell,
-        plant: null,
-      };
-      setGarden(newGarden);
+        // Find the plot at this position
+        const plot = plotsData.find((p) => p.row === plotRow && p.column === plotCol);
+
+        if (!plot || !plot.plant) {
+          console.error("No plot or plant found at this position");
+          return;
+        }
+
+        const plantId = plot.plant._id;
+        const token = localStorage.getItem("auth_token");
+
+        // Update plot to remove plant (set to null)
+        const plotResponse = await fetch(`${API_BASE_URL}plots/${plot._id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            plantId: null,
+          }),
+        });
+
+        // Update plant to set isPlanted to false
+        const plantResponse = await fetch(`${API_BASE_URL}plants/${plantId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            isPlanted: false,
+          }),
+        });
+
+        if (plotResponse.ok && plantResponse.ok) {
+          await fetchUserInventory();
+          await refetchGarden();
+        }
+      } catch (error) {
+        console.error("Failed to harvest plant:", error);
+      }
     }
   };
 
@@ -371,6 +625,23 @@ export default function Garden() {
     if ((harvestedPlants[plantType] ?? 0) > 0 && user?.id) {
       try {
         const token = localStorage.getItem("auth_token");
+
+        // Find a harvested plant of this type to delete
+        const plantToSell = inventoryPlants.find((p) => p.plantType?.plantName?.toLowerCase() === plantType && p.growthStage === 2 && p.isPlanted === false);
+
+        if (!plantToSell) {
+          console.error("No harvested plant found to sell");
+          return;
+        }
+
+        const plantId = plantToSell._id || plantToSell.plantMongoId;
+
+        if (!plantId) {
+          console.error("Plant ID not found");
+          return;
+        }
+
+        // Add coins to user
         const response = await fetch(`${API_BASE_URL}users/coins/add`, {
           method: "POST",
           headers: {
@@ -383,7 +654,15 @@ export default function Garden() {
           }),
         });
 
-        if (response.ok) {
+        // Delete the plant from database
+        const deleteResponse = await fetch(`${API_BASE_URL}plants/${plantId}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok && deleteResponse.ok) {
           setHarvestedPlants((prev) => ({
             ...prev,
             [plantType]: (prev[plantType] ?? 0) - 1,
@@ -392,6 +671,7 @@ export default function Garden() {
             setSelectedHarvestedPlant(null);
           }
           await refreshUser();
+          await fetchUserInventory();
         }
       } catch (error) {
         console.error("Failed to sell plant:", error);
@@ -403,12 +683,81 @@ export default function Garden() {
     setIsEditingName(true);
   };
 
+  const handleSaveGardenName = async () => {
+    if (!gardenId) return;
+    if (!gardenName.trim()) return;
+    if (!hasUnsavedNameChanges) return;
+
+    if (gardenId && gardenName.trim() && hasUnsavedNameChanges) {
+      setNameSaveStatus("saving");
+      try {
+        const updated = await updateGardenName(gardenId, gardenName.trim());
+        setGardenName(updated);
+        setHasUnsavedNameChanges(false);
+        setNameSaveStatus("saved");
+      } catch (error) {
+        console.error("Failed to update garden name:", error);
+        setNameSaveStatus("error");
+      }
+    }
+  };
+
+  const handleGardenNameBlur = async () => {
+    setIsEditingName(false);
+  };
+
+  const handleGardenNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isVisiting) {
+      setGardenName(e.target.value);
+      setHasUnsavedNameChanges(true);
+      setNameSaveStatus("idle");
+    }
+  };
+
   useEffect(() => {
     if (isEditingName && gardenNameInputRef.current) {
       gardenNameInputRef.current.focus();
       gardenNameInputRef.current.select();
     }
   }, [isEditingName]);
+
+  // Set gardenId from /users/me (AuthContext) when available
+  useEffect(() => {
+    if (!isVisiting) {
+      if (user?.gardenId) {
+        // Ensure gardenId is a string, not an object
+        const gardenIdStr = typeof user.gardenId === "string" ? user.gardenId : (user.gardenId as any)?._id || (user.gardenId as any)?.gardenMongoId;
+        if (gardenIdStr) {
+          setGardenId(gardenIdStr);
+        }
+      }
+    }
+  }, [user, isVisiting]);
+
+  // Delay showing input placeholder for a couple seconds so it stays empty first
+  useEffect(() => {
+    const timer = setTimeout(() => setShowNamePlaceholder(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Once we have a gardenId, fetch its current gardenName and populate input
+  useEffect(() => {
+    const loadGardenName = async () => {
+      if (gardenId && !isVisiting) {
+        try {
+          const name = await fetchGardenName(gardenId);
+          if (name) {
+            setGardenName(name);
+            setHasUnsavedNameChanges(false);
+            setNameSaveStatus("saved");
+          }
+        } catch (e) {
+          // ignore fetch error for name
+        }
+      }
+    };
+    loadGardenName();
+  }, [gardenId, isVisiting]);
 
   const handleBuyDirt = async (row: number, col: number) => {
     const cell = garden[row][col];
@@ -474,19 +823,41 @@ export default function Garden() {
       <Navbar />
 
       <main className="flex-1 pt-[73.6px] pb-20 px-4 sm:px-6 lg:px-8 flex flex-col overflow-hidden">
-        {/* Garden Name - Editable (right under navbar) */}
         <div className="pt-6 pb-4 flex items-center justify-center gap-2">
           <input
             ref={gardenNameInputRef}
             type="text"
             value={isVisiting ? visitingGardenName : gardenName}
-            onChange={(e) => !isVisiting && setGardenName(e.target.value)}
-            onBlur={() => setIsEditingName(false)}
+            onChange={handleGardenNameChange}
+            onBlur={handleGardenNameBlur}
             disabled={isVisiting}
-            className={`text-2xl md:text-3xl font-bold text-black text-center bg-transparent border-2 rounded-lg outline-none focus:outline-none focus:ring-2 focus:ring-fleur-green/30 pb-2 px-4 py-2 transition-all duration-200 ${isVisiting ? "border-dashed border-gray-300 cursor-not-allowed" : isEditingName ? "border-fleur-green border-solid focus:border-fleur-green/70" : "border-dashed border-fleur-green/40 hover:border-fleur-green/60"}`}
-            placeholder="Click to edit garden name"
+            className={`text-2xl md:text-3xl font-bold text-black text-center bg-transparent border-2 rounded-lg outline-none focus:outline-none focus:ring-2 focus:ring-fleur-green/30 pb-2 px-4 py-2 transition-all duration-200 ${
+              isVisiting
+                ? "border-dashed border-gray-300 cursor-not-allowed"
+                : nameSaveStatus === "saved"
+                  ? "border-solid border-fleur-green bg-fleur-green/10"
+                  : nameSaveStatus === "saving"
+                    ? "border-solid border-yellow-400 animate-pulse"
+                    : nameSaveStatus === "error"
+                      ? "border-solid border-red-500"
+                      : hasUnsavedNameChanges
+                        ? "border-solid border-yellow-500"
+                        : isEditingName
+                          ? "border-fleur-green border-solid focus:border-fleur-green/70"
+                          : "border-dashed border-fleur-green/40 hover:border-fleur-green/60"
+            }`}
+            placeholder={showNamePlaceholder ? "Click to edit garden name" : ""}
           />
-          {!isVisiting && (
+          {!isVisiting && hasUnsavedNameChanges && (
+            <button
+              onClick={handleSaveGardenName}
+              disabled={nameSaveStatus === "saving"}
+              className="px-4 py-2 bg-fleur-green text-white font-semibold rounded-lg hover:bg-fleur-green/80 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {nameSaveStatus === "saving" ? "Saving..." : "Save"}
+            </button>
+          )}
+          {!isVisiting && !hasUnsavedNameChanges && (
             <button
               onClick={handleEditIconClick}
               className="p-1 text-fleur-green/70 hover:text-fleur-green transition-colors"
@@ -551,6 +922,7 @@ export default function Garden() {
           >
             <div className="w-full h-full bg-transparent flex items-center justify-center">
               <GardenGrid
+                key={gardenRenderKey}
                 garden={garden}
                 onCellClick={handleCellClick}
                 selectedPlant={selectedPlant}

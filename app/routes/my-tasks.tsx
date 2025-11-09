@@ -9,16 +9,13 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 import TaskList from "~/components/TaskList";
 
 export function meta({}: Route.MetaArgs) {
-  return [
-    { title: "Community Tasks - Fleurish" },
-    { name: "description", content: "Community tasks" },
-  ];
+  return [{ title: "Community Tasks - Fleurish" }, { name: "description", content: "Community tasks" }];
 }
 
 const statusOrder = { in_progress: 0, completed: 1 };
 
 export default function MyTasks() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshUser } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +97,9 @@ export default function MyTasks() {
 
       // Update the task in local state
       setTasks((prevTasks) => prevTasks.map((task) => (task.id === taskId ? { ...task, status: "completed" } : task)));
+
+      // Refresh user data to update gems/coins in the footer
+      await refreshUser();
     } catch (err) {
       console.error("Error completing task:", err);
       alert(err instanceof Error ? err.message : "Failed to complete task");

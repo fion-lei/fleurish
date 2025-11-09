@@ -5,6 +5,7 @@ interface AuthLayoutProps {
   children: React.ReactNode;
 }
 
+// Shared layout for login and register pages with two-column responsive design
 export function AuthLayout({ children }: AuthLayoutProps) {
   const location = useLocation();
   const isLogin = location.pathname === "/login";
@@ -12,6 +13,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
   const logoContainerRef = useRef<HTMLDivElement>(null);
   const [formWidth, setFormWidth] = useState<number | null>(null);
 
+  // Dynamically match form width to logo container width for visual alignment
   useEffect(() => {
     const updateFormWidth = () => {
       if (logoContainerRef.current) {
@@ -19,6 +21,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       }
     };
 
+    // Use requestAnimationFrame + setTimeout to ensure DOM is fully rendered
     requestAnimationFrame(() => {
       setTimeout(updateFormWidth, 0);
     });
@@ -47,7 +50,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
               />
             </div>
 
-            {/* Tab Selector */}
+            {/* Tab selector - matches logo width for alignment */}
             <div className="w-fit" style={formWidth ? { width: `${formWidth}px` } : undefined}>
               <div className="flex rounded-pill border border-fleur-purple/40 p-0.5 bg-white/50">
                 <Link
@@ -73,19 +76,18 @@ export function AuthLayout({ children }: AuthLayoutProps) {
               </div>
             </div>
 
-            {/* Form Content */}
+            {/* Form content - matches logo width for alignment */}
             <div className="w-fit" style={formWidth ? { width: `${formWidth}px` } : undefined}>
               {children}
             </div>
           </div>
 
-          {/* Right Column - Island Image */}
+          {/* Right column - decorative island image */}
           <div className="w-full md:w-1/2 flex items-center justify-center">
             <img
               src="/images/login_island.png"
               alt="Garden island"
-              className="w-full max-w-[1230px] h-auto object-contain focus:outline-none"
-              style={{ outline: 'none', border: 'none' }}
+              className="w-full max-w-[1230px] h-auto object-contain"
             />
           </div>
         </div>
@@ -93,4 +95,3 @@ export function AuthLayout({ children }: AuthLayoutProps) {
     </div>
   );
 }
-

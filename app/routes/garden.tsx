@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchGardenById, updateGardenName, fetchGardenName } from "../api/gardens";
+import { updateGardenName, fetchGardenName } from "../api/gardens";
 import { GardenFooter } from "../components/GardenFooter";
 import { GardenGrid, createInitialGarden, type GardenCell, type PlantType } from "../components/GardenGrid";
 import { InventoryPanel } from "../components/InventoryPanel";
@@ -93,9 +93,6 @@ export default function Garden() {
   const [inventoryPlants, setInventoryPlants] = useState<any[]>([]); // Store full plant objects from inventory
   const landPrice = 5; // Price in gems to buy land
   const harvestPrice = 60; // Price in coins when selling harvested plants
-
-  // User's community affiliations - easily replaceable with backend user data
-  const userCommunities = ["Downtown Gardeners", "Organic Growers"];
 
   const gardenNameInputRef = useRef<HTMLInputElement>(null);
 
@@ -488,12 +485,31 @@ export default function Garden() {
   const handleVisitGarden = async (gardenId: string) => {
     setIsLoadingGarden(true);
     try {
-      const gardenData = await fetchGardenById(gardenId);
-      setGarden(gardenData.layout);
-      setVisitingGardenName(gardenData.name);
-      setIsVisiting(true);
-      setIsInventoryOpen(false);
-      setGardenId(gardenData.id);
+      const token = localStorage.getItem("auth_token");
+      
+      // Fetch the visited garden from the backend
+      const gardenResponse = await fetch(`${API_BASE_URL}gardens/${gardenId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (gardenResponse.ok) {
+        const gardenResult = await gardenResponse.json();
+        const visitedGarden = gardenResult.data;
+        
+        // Convert plots to garden grid
+        const plots = visitedGarden.plots || [];
+        const gardenLayout = createGardenFromPlots(plots);
+        
+        setGarden(gardenLayout);
+        setVisitingGardenName(visitedGarden.gardenName || "Unknown Garden");
+        setIsVisiting(true);
+        setIsInventoryOpen(false);
+        setGardenId(gardenId);
+      } else {
+        throw new Error("Failed to fetch garden");
+      }
     } catch (error) {
       console.error("Failed to load garden:", error);
       alert("Failed to load garden. Please try again.");
@@ -502,11 +518,13 @@ export default function Garden() {
     }
   };
 
-  const handleReturnHome = () => {
+  const handleReturnHome = async () => {
     setIsVisiting(false);
     setVisitingGardenName("");
-    // Reset garden to user's own initial garden
-    setGarden(createInitialGarden());
+    setGardenId(null);
+    
+    // Refetch user's own garden to ensure we have the latest data
+    await refetchGarden();
   };
 
   const handleSelectLand = () => {
@@ -996,7 +1014,6 @@ export default function Garden() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onVisit={handleVisitGarden}
-        userCommunities={userCommunities}
       />
     </div>
   );

@@ -442,17 +442,18 @@ export default function Garden() {
         });
 
         if (gemsResponse.ok) {
-          // Create plot in database
-          const plotResponse = await fetch(`${API_BASE_URL}plots`, {
+          // Create plot in database using the createPlot endpoint
+          const plotResponse = await fetch(`${API_BASE_URL}plots/createPlot`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
-              gardenId: userGardenId,
               row: plotRow,
-              col: plotCol,
+              column: plotCol,
+              plantId: null,
+              gardenId: userGardenId,
             }),
           });
 

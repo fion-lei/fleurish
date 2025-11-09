@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import type { Route } from "./+types/leaderboard";
 import { Navbar } from "../components/Navbar";
+import { useAuth } from "../components/AuthContext";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -24,6 +25,7 @@ interface LeaderboardData {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export default function Leaderboard() {
+  const { user } = useAuth();
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -145,20 +147,27 @@ export default function Leaderboard() {
 
           {/* Green Container for #2-4 and User Community */}
           <div className="bg-[#D4E8C1] rounded-3xl p-6 space-y-3">
-            {/* #2-4 Communities - always show these 3 in light green */}
-            {secondToFourth.map((community) => (
-              <div
-                key={community._id}
-                className="flex items-center bg-fleur-apple text-fleur-green text-lg font-medium py-5 px-8 rounded-2xl shadow-soft"
-              >
-                <span className="w-12">#{community.rank}</span>
-                <span className="flex-1">{community.communityName}</span>
-                <span className="bg-white text-fleur-green px-4 py-1 rounded-lg font-bold min-w-[80px] text-center">{community.communityPoints}</span>
-              </div>
-            ))}
+            {/* #2-4 Communities - highlight user's community in dark green */}
+            {secondToFourth.map((community) => {
+              const isUserCommunity = user?.communityId === community._id;
+              return (
+                <div
+                  key={community._id}
+                  className={`flex items-center ${
+                    isUserCommunity 
+                      ? 'bg-fleur-green text-white font-semibold' 
+                      : 'bg-fleur-apple text-fleur-green font-medium'
+                  } text-lg py-5 px-8 rounded-2xl shadow-soft`}
+                >
+                  <span className="w-12">#{community.rank}</span>
+                  <span className="flex-1">{community.communityName}</span>
+                  <span className="bg-white text-fleur-green px-4 py-1 rounded-lg font-bold min-w-[80px] text-center">{community.communityPoints}</span>
+                </div>
+              );
+            })}
 
-            {/* Your Community - show in dark green if not #1 */}
-            {userCommunity && userCommunity.rank !== 1 && (
+            {/* Your Community - show in dark green if not in top 4 */}
+            {userCommunity && userCommunity.rank > 4 && (
               <div className="flex items-center bg-fleur-green text-white text-lg font-semibold py-5 px-8 rounded-2xl shadow-soft">
                 <span className="w-12">#{userCommunity.rank}</span>
                 <span className="flex-1">{userCommunity.communityName}</span>

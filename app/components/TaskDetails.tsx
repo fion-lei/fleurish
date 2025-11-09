@@ -48,7 +48,7 @@ export default function TaskDetails({ task, showButton, buttonLabel, onAccept, i
           <h2 className="text-lg font-semibold">{task.title}</h2>
           <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-medium text-white rounded ${getStatusColor(task.status)}`}>{getStatusLabel(task.status)}</span>
         </div>
-        <p className="text-sm font-medium ml-2">{task.points} points</p>
+        <p className="text-sm font-medium ml-2">{task.points} gems</p>
       </div>
 
       <p className="text-sm text-gray-700 flex-1">{task.description}</p>

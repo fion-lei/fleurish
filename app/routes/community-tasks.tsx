@@ -15,7 +15,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function CommunityTasks() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshUser } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +119,9 @@ export default function CommunityTasks() {
 
       // Update the task in local state
       setTasks((prevTasks) => prevTasks.map((task) => (task.id === taskId ? { ...task, status: "in_progress" } : task)));
+
+      // Refresh user data to update gems/coins in the footer
+      await refreshUser();
     } catch (err) {
       console.error("Error accepting task:", err);
       alert(err instanceof Error ? err.message : "Failed to accept task");

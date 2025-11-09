@@ -5,7 +5,7 @@ A React + TypeScript + Tailwind CSS frontend with an organized app structure.
 ## Links
 
 - Backend repository: [`fleurish-backend`](https://github.com/fion-lei/fleurish-backend)
-- Hardware repository: coming soon
+- Hardware repository: ['fleurish-hardware'](https://github.com/ryanwoong/fleurish-hardware)
 
 ## Project Structure
 

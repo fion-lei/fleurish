@@ -5,6 +5,10 @@ export interface User {
   id: string;
   email: string;
   name?: string;
+  communityId?: string;
+  gardenId?: string;
+  gems?: number;
+  coins?: number;
 }
 
 interface AuthContextType {
@@ -23,14 +27,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const token = localStorage.getItem("auth_token");
         if (token) {
-
-            const response = await fetch(`${API_BASE_URL}/me`, {
+          const response = await fetch(`${API_BASE_URL}users/me`, {
             headers: {
               Authorization: `Bearer ${token}`,
             },
@@ -38,7 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (response.ok) {
             const data = await response.json();
-            setUser(data.user || data);
+            const userData = data.data?.user || data.user || data;
+            if (userData.userId && !userData.id) {
+              userData.id = userData.userId;
+            }
+            setUser(userData);
           } else {
             localStorage.removeItem("auth_token");
           }
@@ -55,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await fetch(`${API_BASE_URL}/login`, {
+    const response = await fetch(`${API_BASE_URL}users/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -69,12 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const data = await response.json();
-    localStorage.setItem("auth_token", data.token);
-    setUser(data.user);
+    localStorage.setItem("auth_token", data.token || data.data?.token);
+    const userData = data.data?.user || data.user || data;
+    if (userData.userId && !userData.id) {
+      userData.id = userData.userId;
+    }
+    setUser(userData);
   };
 
   const register = async (email: string, password: string) => {
-    const response = await fetch(`${API_BASE_URL}/register`, {
+    const response = await fetch(`${API_BASE_URL}users/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -88,8 +98,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const data = await response.json();
-    localStorage.setItem("auth_token", data.token);
-    setUser(data.user);
+    localStorage.setItem("auth_token", data.token || data.data?.token);
+    const userData = data.data?.user || data.user || data;
+    if (userData.userId && !userData.id) {
+      userData.id = userData.userId;
+    }
+    setUser(userData);
   };
 
   const logout = async () => {

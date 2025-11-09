@@ -5,6 +5,10 @@ export interface User {
   id: string;
   email: string;
   name?: string;
+  communityId?: string;
+  gardenId?: string;
+  gems?: number;
+  coins?: number;
 }
 
 interface AuthContextType {
@@ -36,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (response.ok) {
             const data = await response.json();
-            setUser(data.user || data);
+            setUser(data.data?.user || data.user || data);
           } else {
             localStorage.removeItem("auth_token");
           }
@@ -67,8 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const data = await response.json();
-    localStorage.setItem("auth_token", data.token);
-    setUser(data.user);
+    localStorage.setItem("auth_token", data.token || data.data?.token);
+    setUser(data.data?.user || data.user || data);
   };
 
   const register = async (email: string, password: string) => {
@@ -86,8 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const data = await response.json();
-    localStorage.setItem("auth_token", data.token);
-    setUser(data.user);
+    localStorage.setItem("auth_token", data.token || data.data?.token);
+    setUser(data.data?.user || data.user || data);
   };
 
   const logout = async () => {

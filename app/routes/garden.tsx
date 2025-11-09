@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { fetchGardenById } from "../api/gardens";
 import { GardenFooter } from "../components/GardenFooter";
 import { GardenGrid, createInitialGarden, type GardenCell, type PlantType } from "../components/GardenGrid";
 import { InventoryPanel } from "../components/InventoryPanel";
 import { Navbar } from "../components/Navbar";
+import { VisitGardenModal } from "../components/VisitGardenModal";
 import type { Route } from "./+types/garden";
 
 export function meta({}: Route.MetaArgs) {
@@ -32,9 +34,16 @@ export default function Garden() {
     yellow: 0,
   });
   const [selectedHarvestedPlant, setSelectedHarvestedPlant] = useState<PlantType | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isVisiting, setIsVisiting] = useState(false);
+  const [visitingGardenName, setVisitingGardenName] = useState("");
+  const [isLoadingGarden, setIsLoadingGarden] = useState(false);
   const landPrice = 5; // Price in gems to buy land
   const plantPrices: Record<PlantType, number> = { pink: 30, yellow: 20, purple: 15 };
   const harvestPrice = 60; // Price in coins when selling harvested plants
+  
+  // User's community affiliations - easily replaceable with backend user data
+  const userCommunities = ["Downtown Gardeners", "Organic Growers"];
   
   const gardenNameInputRef = useRef<HTMLInputElement>(null);
 
@@ -77,6 +86,33 @@ export default function Garden() {
       setSelectedPlant(null); // Deselect when closing inventory
       setSelectedLand(false); // Deselect land when closing inventory
     }
+  };
+
+  const handleCommunityClick = () => {
+    setIsModalOpen(true);
+  };
+
+  const handleVisitGarden = async (gardenId: string) => {
+    setIsLoadingGarden(true);
+    try {
+      const gardenData = await fetchGardenById(gardenId);
+      setGarden(gardenData.layout);
+      setVisitingGardenName(gardenData.name);
+      setIsVisiting(true);
+      setIsInventoryOpen(false);
+    } catch (error) {
+      console.error("Failed to load garden:", error);
+      alert("Failed to load garden. Please try again.");
+    } finally {
+      setIsLoadingGarden(false);
+    }
+  };
+
+  const handleReturnHome = () => {
+    setIsVisiting(false);
+    setVisitingGardenName("");
+    // Reset garden to user's own initial garden
+    setGarden(createInitialGarden());
   };
 
   const handleSelectLand = () => {
@@ -173,37 +209,42 @@ export default function Garden() {
           <input
             ref={gardenNameInputRef}
             type="text"
-            value={gardenName}
-            onChange={(e) => setGardenName(e.target.value)}
+            value={isVisiting ? visitingGardenName : gardenName}
+            onChange={(e) => !isVisiting && setGardenName(e.target.value)}
             onBlur={() => setIsEditingName(false)}
+            disabled={isVisiting}
             className={`text-2xl md:text-3xl font-bold text-black text-center bg-transparent border-2 rounded-lg outline-none focus:outline-none focus:ring-2 focus:ring-fleur-green/30 pb-2 px-4 py-2 transition-all duration-200 ${
-              isEditingName
+              isVisiting
+                ? "border-dashed border-gray-300 cursor-not-allowed"
+                : isEditingName
                 ? "border-fleur-green border-solid focus:border-fleur-green/70"
                 : "border-dashed border-fleur-green/40 hover:border-fleur-green/60"
             }`}
             placeholder="Click to edit garden name"
           />
-          <button
-            onClick={handleEditIconClick}
-            className="p-1 text-fleur-green/70 hover:text-fleur-green transition-colors"
-            aria-label="Edit garden name"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-              aria-hidden="true"
+          {!isVisiting && (
+            <button
+              onClick={handleEditIconClick}
+              className="p-1 text-fleur-green/70 hover:text-fleur-green transition-colors"
+              aria-label="Edit garden name"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              />
-            </svg>
-          </button>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
+              </svg>
+            </button>
+          )}
         </div>
         
         {/* Selected plant indicator */}
@@ -317,8 +358,19 @@ export default function Garden() {
 
       <GardenFooter
         onBackpackClick={handleBackpackClick}
+        onCommunityClick={handleCommunityClick}
         gems={gems}
         coins={coins}
+        isVisiting={isVisiting}
+        onReturnHome={handleReturnHome}
+      />
+
+      {/* Visit Garden Modal */}
+      <VisitGardenModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onVisit={handleVisitGarden}
+        userCommunities={userCommunities}
       />
     </div>
   );

@@ -157,7 +157,9 @@ export default function Garden() {
           const userGarden = gardenResult.data;
 
           if (userGarden) {
-            setUserGardenId(userGarden.gardenMongoId || gardenId);
+            // Ensure gardenMongoId is a string, not an object
+            const gardenMongoId = typeof userGarden.gardenMongoId === "string" ? userGarden.gardenMongoId : (userGarden.gardenMongoId as any)?._id || (userGarden.gardenMongoId as any)?.toString() || gardenId;
+            setUserGardenId(gardenMongoId);
 
             // Use plots array from garden data
             const plots = userGarden.plots || [];
@@ -182,10 +184,15 @@ export default function Garden() {
   const refetchGarden = async () => {
     if (!user?.gardenId || !userGardenId) return;
 
+    // Ensure userGardenId is a string, not an object
+    const gardenIdStr = typeof userGardenId === "string" ? userGardenId : (userGardenId as any)?._id || (userGardenId as any)?.toString();
+
+    if (!gardenIdStr) return;
+
     try {
       const token = localStorage.getItem("auth_token");
       // Add cache-busting to ensure we get fresh data
-      const gardenResponse = await fetch(`${API_BASE_URL}gardens/${userGardenId}?t=${Date.now()}`, {
+      const gardenResponse = await fetch(`${API_BASE_URL}gardens/${gardenIdStr}?t=${Date.now()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Cache-Control": "no-cache",
@@ -235,9 +242,10 @@ export default function Garden() {
         plants.forEach((plant: any) => {
           const plantType = plant.plantType?.plantName?.toLowerCase() as PlantType;
           if (plantType) {
-            if (plant.growth === 0) {
+            // Use growthStage (0, 1, 2) not growth (which is 0-100)
+            if (plant.growthStage === 0) {
               purchased[plantType] = (purchased[plantType] || 0) + 1;
-            } else if (plant.growth === 2) {
+            } else if (plant.growthStage === 2) {
               harvested[plantType] = (harvested[plantType] || 0) + 1;
             }
           }
@@ -347,8 +355,8 @@ export default function Garden() {
           return;
         }
 
-        // Find a plant from inventory with growth=0 and isPlanted=false
-        const availablePlant = inventoryPlants.find((p) => p.plantType?.plantName?.toLowerCase() === selectedPlant && p.growth === 0 && p.isPlanted === false);
+        // Find a plant from inventory with growthStage=0 and isPlanted=false
+        const availablePlant = inventoryPlants.find((p) => p.plantType?.plantName?.toLowerCase() === selectedPlant && p.growthStage === 0 && p.isPlanted === false);
 
         if (!availablePlant) {
           console.error("No available plant in inventory");
@@ -406,13 +414,62 @@ export default function Garden() {
     }
     // If there's a mature plant (stage 2), harvest it
     else if (cell.plant && cell.plant.stage === 2) {
-      const newGarden = garden.map((r) => [...r]);
-      newGarden[row][col] = {
-        ...cell,
-        plant: null,
-      };
-      setGarden(newGarden);
-      // TODO: Update user's coins in backend when harvesting
+      try {
+        // Convert array indices to database coordinates
+        const centerRow = 2;
+        const centerCol = 2;
+        const plotRow = centerRow - row;
+        const plotCol = col - centerCol;
+
+        // Find the plot at this position
+        const plot = plotsData.find((p) => p.row === plotRow && p.column === plotCol);
+
+        if (!plot || !plot.plant) {
+          console.error("No plot or plant found at this position");
+          return;
+        }
+
+        const plantId = plot.plant._id || plot.plant.plantMongoId;
+
+        if (!plantId) {
+          console.error("Plant ID not found");
+          return;
+        }
+
+        const token = localStorage.getItem("auth_token");
+
+        // Update the plot to remove the plant (set to null)
+        const plotResponse = await fetch(`${API_BASE_URL}plots/${plot._id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            plantId: null,
+          }),
+        });
+
+        // Update the plant to isPlanted=false
+        const plantResponse = await fetch(`${API_BASE_URL}plants/${plantId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            isPlanted: false,
+          }),
+        });
+
+        if (plotResponse.ok && plantResponse.ok) {
+          // Refresh inventory and garden
+          await fetchUserInventory();
+          await refetchGarden();
+        }
+      } catch (error) {
+        console.error("Failed to harvest:", error);
+      }
     }
   };
 
@@ -568,6 +625,23 @@ export default function Garden() {
     if ((harvestedPlants[plantType] ?? 0) > 0 && user?.id) {
       try {
         const token = localStorage.getItem("auth_token");
+
+        // Find a harvested plant of this type to delete
+        const plantToSell = inventoryPlants.find((p) => p.plantType?.plantName?.toLowerCase() === plantType && p.growthStage === 2 && p.isPlanted === false);
+
+        if (!plantToSell) {
+          console.error("No harvested plant found to sell");
+          return;
+        }
+
+        const plantId = plantToSell._id || plantToSell.plantMongoId;
+
+        if (!plantId) {
+          console.error("Plant ID not found");
+          return;
+        }
+
+        // Add coins to user
         const response = await fetch(`${API_BASE_URL}users/coins/add`, {
           method: "POST",
           headers: {
@@ -580,7 +654,15 @@ export default function Garden() {
           }),
         });
 
-        if (response.ok) {
+        // Delete the plant from database
+        const deleteResponse = await fetch(`${API_BASE_URL}plants/${plantId}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok && deleteResponse.ok) {
           setHarvestedPlants((prev) => ({
             ...prev,
             [plantType]: (prev[plantType] ?? 0) - 1,
@@ -589,6 +671,7 @@ export default function Garden() {
             setSelectedHarvestedPlant(null);
           }
           await refreshUser();
+          await fetchUserInventory();
         }
       } catch (error) {
         console.error("Failed to sell plant:", error);
@@ -642,7 +725,11 @@ export default function Garden() {
   useEffect(() => {
     if (!isVisiting) {
       if (user?.gardenId) {
-        setGardenId(user.gardenId);
+        // Ensure gardenId is a string, not an object
+        const gardenIdStr = typeof user.gardenId === "string" ? user.gardenId : (user.gardenId as any)?._id || (user.gardenId as any)?.gardenMongoId;
+        if (gardenIdStr) {
+          setGardenId(gardenIdStr);
+        }
       }
     }
   }, [user, isVisiting]);
@@ -748,16 +835,16 @@ export default function Garden() {
               isVisiting
                 ? "border-dashed border-gray-300 cursor-not-allowed"
                 : nameSaveStatus === "saved"
-                ? "border-solid border-fleur-green bg-fleur-green/10"
-                : nameSaveStatus === "saving"
-                ? "border-solid border-yellow-400 animate-pulse"
-                : nameSaveStatus === "error"
-                ? "border-solid border-red-500"
-                : hasUnsavedNameChanges
-                ? "border-solid border-yellow-500"
-                : isEditingName
-                ? "border-fleur-green border-solid focus:border-fleur-green/70"
-                : "border-dashed border-fleur-green/40 hover:border-fleur-green/60"
+                  ? "border-solid border-fleur-green bg-fleur-green/10"
+                  : nameSaveStatus === "saving"
+                    ? "border-solid border-yellow-400 animate-pulse"
+                    : nameSaveStatus === "error"
+                      ? "border-solid border-red-500"
+                      : hasUnsavedNameChanges
+                        ? "border-solid border-yellow-500"
+                        : isEditingName
+                          ? "border-fleur-green border-solid focus:border-fleur-green/70"
+                          : "border-dashed border-fleur-green/40 hover:border-fleur-green/60"
             }`}
             placeholder={showNamePlaceholder ? "Click to edit garden name" : ""}
           />
@@ -795,7 +882,6 @@ export default function Garden() {
           )}
         </div>
 
-        
         {/* Selected plant indicator */}
         {selectedPlant && (
           <div className="text-center mb-4">

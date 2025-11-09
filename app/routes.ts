@@ -9,5 +9,4 @@ export default [
   route("community-tasks", "routes/community-tasks.tsx"),
   route("leaderboard", "routes/leaderboard.tsx"),
   route("profile", "routes/profile.tsx"),
-  route("request-board", "routes/request-board.tsx"),
 ] satisfies RouteConfig;

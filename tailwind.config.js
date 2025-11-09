@@ -22,9 +22,18 @@ export default {
         wide2: "0.06em",
       },
       borderRadius: {
-        pill: "9999px",
+        pill: '9999px'
       },
-    },
+      keyframes: {
+        slideIn: {
+          '0%': { transform: 'translateX(10px)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' }
+        }
+      },
+      animation: {
+        slideIn: 'slideIn 0.2s ease-out'
+      }
+    }
   },
   plugins: [],
 };

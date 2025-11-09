@@ -16,6 +16,7 @@ export default function Register() {
     const formData = new FormData(e.currentTarget);
     const values = Object.fromEntries(formData.entries());
     console.log("Register form values:", values);
+    // TODO: Add registration logic and redirect
   };
 
   return (

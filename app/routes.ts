@@ -4,4 +4,9 @@ export default [
   index("routes/home.tsx"),
   route("login", "routes/login.tsx"),
   route("register", "routes/register.tsx"),
+  route("garden", "routes/garden.tsx"),
+  route("my-tasks", "routes/my-tasks.tsx"),
+  route("community-tasks", "routes/community-tasks.tsx"),
+  route("leaderboard", "routes/leaderboard.tsx"),
+  route("profile", "routes/profile.tsx"),
 ] satisfies RouteConfig;

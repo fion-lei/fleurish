@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router";
 import { AuthLayout } from "../components/AuthLayout";
 import { FormInput } from "../components/FormInput";
 import { SubmitButton } from "../components/SubmitButton";
@@ -10,13 +11,16 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-// Login component
 export default function Login() {
+  const navigate = useNavigate();
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const values = Object.fromEntries(formData.entries());
     console.log("Login form values:", values);
+    // Redirect to garden page after successful login
+    navigate("/garden");
   };
 
   return (

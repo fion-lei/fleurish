@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { AuthLayout } from "../components/AuthLayout";
 import { FormInput } from "../components/FormInput";
 import { SubmitButton } from "../components/SubmitButton";
+import { useAuth } from "../components/AuthContext";
 import type { Route } from "./+types/login";
 
 export function meta({}: Route.MetaArgs) {
@@ -13,14 +15,28 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+
     const formData = new FormData(e.currentTarget);
-    const values = Object.fromEntries(formData.entries());
-    console.log("Login form values:", values);
-    // Redirect to garden page after successful login
-    navigate("/garden");
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+
+    try {
+      await login(email, password);
+      // Redirect to garden page after successful login
+      navigate("/garden");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -29,6 +45,12 @@ export default function Login() {
         <h2 className="text-[22.95px] md:text-[27.54px] font-semibold text-fleur-green text-center">
           Log In
         </h2>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <FormInput
@@ -39,6 +61,7 @@ export default function Login() {
             required
             aria-label="Email address"
             autoComplete="email"
+            disabled={isSubmitting}
           />
 
           <FormInput
@@ -49,9 +72,12 @@ export default function Login() {
             required
             aria-label="Password"
             autoComplete="current-password"
+            disabled={isSubmitting}
           />
 
-          <SubmitButton>SIGN IN</SubmitButton>
+          <SubmitButton disabled={isSubmitting}>
+            {isSubmitting ? "SIGNING IN..." : "SIGN IN"}
+          </SubmitButton>
         </form>
       </div>
     </AuthLayout>

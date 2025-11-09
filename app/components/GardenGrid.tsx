@@ -8,6 +8,7 @@ export type PlantStage = 0 | 1 | 2; // 0 = seedling, 1 = color_1, 2 = color_2
 export interface Plant {
   type: PlantType;
   stage: PlantStage;
+  _id?: string; // Unique identifier to help React detect changes
 }
 
 export interface GardenCell {
@@ -94,7 +95,7 @@ export function GardenGrid({ garden, onCellClick, selectedPlant, selectedLand, o
         {garden.map((row, rowIndex) =>
           row.map((cell, colIndex) => (
             <GardenCell
-              key={`${rowIndex}-${colIndex}`}
+              key={`${rowIndex}-${colIndex}-${cell.plant?._id || cell.plant?.stage || "empty"}`}
               cell={cell}
               row={rowIndex}
               col={colIndex}
@@ -188,6 +189,7 @@ function GardenCell({ cell, row, col, onClick, selectedPlant, selectedLand, tile
       {cell.plant && (
         <>
           <img
+            key={cell.plant._id || `${cell.plant.type}-${cell.plant.stage}`} // Use unique ID to force re-render
             src={getPlantSprite(cell.plant)}
             alt={`${cell.plant.type} stage ${cell.plant.stage}`}
             className="absolute inset-0 pixelated z-10"
@@ -221,10 +223,10 @@ function GardenCell({ cell, row, col, onClick, selectedPlant, selectedLand, tile
 }
 
 function getPlantSprite(plant: Plant): string {
-  if (plant.stage === 0) {
-    return "/sprites/plants/seedling.png";
-  }
-  return `/sprites/plants/${plant.type}_${plant.stage}.png`;
+  const sprite = plant.stage === 0 ? "/sprites/plants/seedling.png" : `/sprites/plants/${plant.type}_${plant.stage}.png`;
+
+  console.log(`[getPlantSprite] type=${plant.type}, stage=${plant.stage}, sprite=${sprite}`);
+  return sprite;
 }
 
 // Helper function to create initial garden state

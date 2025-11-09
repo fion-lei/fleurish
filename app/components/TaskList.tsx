@@ -51,7 +51,7 @@ export default function TaskList({ tasks, selectedTask, onSelect }: TaskListProp
       {tasks.length === 0 ? (
         <p className="text-gray-500">No tasks yet.</p>
       ) : (
-        <div className="overflow-y-auto flex-1 pr-1">
+        <div className="overflow-y-auto flex-1 pr-1 max-h-[60vh]">
           <ul className="space-y-2">
             {tasks.map((task) => (
               <li

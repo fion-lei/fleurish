@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import type { Route } from "./+types/community-tasks";
+import TaskDetails from "~/components/TaskDetails";
+import TaskList from "~/components/TaskList";
+import type { Task } from "~/components/TaskList";
 import { Navbar } from "../components/Navbar";
 import TaskList from "~/components/TaskList";
 import TaskDetails from "~/components/TaskDetails";

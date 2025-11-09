@@ -11,6 +11,25 @@ type TaskDetailsProps = {
 export default function TaskDetails({ task, showButton, buttonLabel, onAccept, isAccepting }: TaskDetailsProps) {
   if (!task) {
     return <div className="p-3 border rounded-lg bg-fleur-purple shadow text-gray-500 text-sm max-h-[calc(100vh-140px)]">Select a task to view details.</div>;
+  isCommunity?: boolean;
+  completed?: boolean;
+};
+
+export default function TaskDetails({
+  task,
+  showButton,
+  buttonLabel,
+  isCommunity,
+  completed,
+}: TaskDetailsProps) {
+  if (!task) {
+    return (
+      <div
+        className={`p-4 border rounded-l shadow text-gray-500 ${isCommunity ? "bg-fleur-purple" : "bg-orange-300"}`}
+      >
+        Select a task to view details.
+      </div>
+    );
   }
 
   const getStatusColor = (status: string) => {
@@ -59,6 +78,12 @@ export default function TaskDetails({ task, showButton, buttonLabel, onAccept, i
         >
           {isAccepting ? "Processing..." : buttonLabel}
         </button>
+      )}
+
+      {completed && (
+        <p className="mt-auto text-center font-medium text-gray-700">
+          You have completed this task!
+        </p>
       )}
     </div>
   );

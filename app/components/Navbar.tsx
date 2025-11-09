@@ -1,7 +1,21 @@
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
+import { useState } from "react";
+import { useAuth } from "./AuthContext";
 
 export function Navbar() {
   const currentPath = useLocation().pathname;
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate("/login");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
 
   const navItems = [
     { path: "/garden", label: "Garden" },
@@ -13,9 +27,9 @@ export function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 pt-4">
       <div className="max-w-[1536px] mx-auto pl-4 pr-8 sm:pl-6 sm:pr-12 lg:pl-8 lg:pr-16">
-        <div className="flex items-center justify-between h-[57.6px]">
+        <div className="flex items-center justify-center h-[57.6px] relative">
           {/* Brand logo and title - links to garden page */}
-          <Link to="/garden" className="flex items-end gap-2">
+          <Link to="/garden" className="flex items-end gap-2 absolute left-0">
             <h1 className="text-[26.46px] font-bold leading-none">
               <span className="text-fleur-green">fleur</span>
               <span className="text-fleur-purple">ish</span>
@@ -28,7 +42,7 @@ export function Navbar() {
             />
           </Link>
 
-          {/* Navigation links with active state highlighting */}
+          {/* Navigation links with active state highlighting - centered */}
           <div className="flex items-center rounded-pill border border-fleur-green/60 bg-white px-2 py-1 gap-2">
             {navItems.map((item) => {
               const isActive = currentPath === item.path;
@@ -48,31 +62,52 @@ export function Navbar() {
             })}
           </div>
 
-          {/* Profile icon - purple when active, green with hover effect otherwise */}
-          <Link
-            to="/profile"
-            className={`p-2 rounded-full transition-all duration-300 ease-in-out ${
-              currentPath === "/profile"
-                ? "bg-fleur-purple text-white"
-                : "text-fleur-green hover:text-fleur-purple hover:bg-fleur-purple/10"
+          <div 
+            className={`flex items-center rounded-full transition-all duration-300 ease-in-out ${
+              showDropdown ? "bg-fleur-purple/10" : ""
             }`}
-            aria-label="Profile"
+            onMouseEnter={() => setShowDropdown(true)}
+            onMouseLeave={() => setShowDropdown(false)}
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
+            <div 
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                showDropdown ? 'w-[88px] pl-2' : 'w-0'
+              }`}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-              />
-            </svg>
-          </Link>
+              <button
+                onClick={handleLogout}
+                className="whitespace-nowrap text-fleur-purple transition-colors focus:outline-none bg-white/80 px-3 py-1 rounded-full mr-1"
+              >
+                Logout
+              </button>
+            </div>
+
+            <Link
+              to="/profile"
+              className={`p-2 rounded-full transition-all duration-300 ease-in-out flex focus:outline-none ${
+                showDropdown ? "text-fleur-purple" : "text-fleur-green hover:text-fleur-purple"
+              }`}
+              aria-label="Profile"
+              onClick={(e) => {
+                e.currentTarget.blur();
+              }}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                />
+              </svg>
+            </Link>
+          </div>
         </div>
       </div>
     </nav>

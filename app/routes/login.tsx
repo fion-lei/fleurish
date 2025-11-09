@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { AuthLayout } from "../components/AuthLayout";
 import { FormInput } from "../components/FormInput";
+import { PasswordInput } from "../components/PasswordInput";
 import { SubmitButton } from "../components/SubmitButton";
 import { useAuth } from "../components/AuthContext";
 import type { Route } from "./+types/login";
@@ -64,10 +65,9 @@ export default function Login() {
             disabled={isSubmitting}
           />
 
-          <FormInput
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             placeholder="Password"
             required
             aria-label="Password"

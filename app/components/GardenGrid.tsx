@@ -1,16 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export type TerrainType =
-  | "TL_grass"
-  | "TM_grass"
-  | "TR_grass"
-  | "ML_grass"
-  | "MM_grass"
-  | "MR_grass"
-  | "BL_grass"
-  | "BM_grass"
-  | "BR_grass"
-  | "dirt";
+export type TerrainType = "TL_grass" | "TM_grass" | "TR_grass" | "ML_grass" | "MM_grass" | "MR_grass" | "BL_grass" | "BM_grass" | "BR_grass" | "dirt";
 
 export type PlantType = "pink" | "purple" | "yellow";
 export type PlantStage = 0 | 1 | 2; // 0 = seedling, 1 = color_1, 2 = color_2
@@ -43,40 +33,40 @@ export function GardenGrid({ garden, onCellClick, selectedPlant, selectedLand, o
   useEffect(() => {
     const calculateTileSize = () => {
       if (!containerRef.current) return;
-      
+
       // Get the closest flex parent that contains the garden container
       const container = containerRef.current.parentElement?.parentElement;
       if (!container) return;
-      
+
       const containerWidth = container.clientWidth;
       const containerHeight = container.clientHeight;
-      
+
       const base = 16;
-      
+
       // Calculate size that fits in container
       const minDimension = Math.min(containerWidth, containerHeight);
       const size = Math.floor(minDimension / 5);
-      
+
       const snappedSize = Math.floor(size / base) * base;
-      
+
       const finalSize = Math.max(snappedSize, base);
-      
+
       setTileSize(finalSize);
     };
 
     // Initial calculation with delay for backend
     const timer = setTimeout(calculateTileSize, 0);
-    
+
     const resizeObserver = new ResizeObserver(() => {
       calculateTileSize();
     });
-    
+
     if (containerRef.current?.parentElement?.parentElement) {
       resizeObserver.observe(containerRef.current.parentElement.parentElement);
     }
-    
+
     window.addEventListener("resize", calculateTileSize);
-    
+
     return () => {
       clearTimeout(timer);
       resizeObserver.disconnect();
@@ -174,26 +164,10 @@ function GardenCell({ cell, row, col, onClick, selectedPlant, selectedLand, tile
       style={{
         width: `${tileSize}px`,
         height: `${tileSize}px`,
-        boxShadow: canPlant
-          ? "inset 0 0 0 1px #85B254"
-          : canHarvest
-          ? "inset 0 0 0 1px #E1BAD4"
-          : canBuyDirt
-          ? "inset 0 0 0 1px #F0FFC8"
-          : "none",
+        boxShadow: canPlant ? "inset 0 0 0 1px #85B254" : canHarvest ? "inset 0 0 0 1px #E1BAD4" : canBuyDirt ? "inset 0 0 0 1px #F0FFC8" : "none",
       }}
       disabled={!canPlant && !canHarvest && !canBuyDirt}
-      title={
-        canPlant
-          ? `Click to plant ${selectedPlant}`
-          : canHarvest
-          ? "Click to harvest"
-          : canBuyDirt
-          ? `Click to buy land for ${landPrice} gems`
-          : cell.plant
-          ? `${cell.plant.type} - Stage ${cell.plant.stage + 1}`
-          : ""
-      }
+      title={canPlant ? `Click to plant ${selectedPlant}` : canHarvest ? "Click to harvest" : canBuyDirt ? `Click to buy land for ${landPrice} gems` : cell.plant ? `${cell.plant.type} - Stage ${cell.plant.stage + 1}` : ""}
     >
       {/* Terrain background */}
       <img
@@ -209,7 +183,7 @@ function GardenCell({ cell, row, col, onClick, selectedPlant, selectedLand, tile
           padding: 0,
         }}
       />
-      
+
       {/* Plant overlay */}
       {cell.plant && (
         <>
@@ -226,7 +200,7 @@ function GardenCell({ cell, row, col, onClick, selectedPlant, selectedLand, tile
               padding: 0,
             }}
           />
-          
+
           {/* Harvest button for mature plants */}
           {canHarvest && showHarvestBtn && (
             <button
@@ -256,12 +230,12 @@ function getPlantSprite(plant: Plant): string {
 // Helper function to create initial garden state
 export function createInitialGarden(): GardenCell[][] {
   const garden: GardenCell[][] = [];
-  
+
   for (let row = 0; row < 5; row++) {
     const gardenRow: GardenCell[] = [];
     for (let col = 0; col < 5; col++) {
       let terrain: TerrainType;
-      
+
       // 5x5 grid with the specified pattern
       if (row === 0) {
         // Top row: TL_grass, TM_grass, TM_grass, TM_grass, TR_grass
@@ -270,8 +244,8 @@ export function createInitialGarden(): GardenCell[][] {
         // Second row: ML_grass, MM_grass, MM_grass, MM_grass, MR_grass
         terrain = col === 0 ? "ML_grass" : col === 4 ? "MR_grass" : "MM_grass";
       } else if (row === 2) {
-        // Middle row: ML_grass, MM_grass, dirt, MM_grass, MR_grass
-        terrain = col === 0 ? "ML_grass" : col === 2 ? "dirt" : col === 4 ? "MR_grass" : "MM_grass";
+        // Middle row: ML_grass, MM_grass, MM_grass, MM_grass, MR_grass
+        terrain = col === 0 ? "ML_grass" : col === 4 ? "MR_grass" : "MM_grass";
       } else if (row === 3) {
         // Fourth row: ML_grass, MM_grass, MM_grass, MM_grass, MR_grass
         terrain = col === 0 ? "ML_grass" : col === 4 ? "MR_grass" : "MM_grass";
@@ -279,7 +253,7 @@ export function createInitialGarden(): GardenCell[][] {
         // Fifth row: BL_grass, BM_grass, BM_grass, BM_grass, BR_grass
         terrain = col === 0 ? "BL_grass" : col === 4 ? "BR_grass" : "BM_grass";
       }
-      
+
       gardenRow.push({
         terrain,
         plant: null,
@@ -287,6 +261,6 @@ export function createInitialGarden(): GardenCell[][] {
     }
     garden.push(gardenRow);
   }
-  
+
   return garden;
 }

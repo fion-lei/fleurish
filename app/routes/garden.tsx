@@ -6,59 +6,235 @@ import { InventoryPanel } from "../components/InventoryPanel";
 import { Navbar } from "../components/Navbar";
 import { useAuth } from "../components/AuthContext";
 import { VisitGardenModal } from "../components/VisitGardenModal";
+import { useAuth } from "../components/AuthContext";
 import type { Route } from "./+types/garden";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+function createGardenFromPlots(plots: any[]): GardenCell[][] {
+  const baseGarden = createInitialGarden();
+
+  // Map to store plot positions
+  const plotMap = new Map<string, any>();
+  plots.forEach((plot) => {
+    const key = `${plot.row},${plot.column}`;
+    plotMap.set(key, plot);
+  });
+
+  const centerRow = 2;
+  const centerCol = 2;
+
+  // Update garden with plots
+  for (let row = -2; row <= 2; row++) {
+    for (let col = -2; col <= 2; col++) {
+      const key = `${row},${col}`;
+      const plot = plotMap.get(key);
+
+      const arrayRow = centerRow - row;
+      const arrayCol = centerCol + col;
+
+      if (plot && arrayRow >= 0 && arrayRow < 5 && arrayCol >= 0 && arrayCol < 5) {
+        // This plot exists, make it dirt
+        baseGarden[arrayRow][arrayCol].terrain = "dirt";
+
+        // Add plant if it exists
+        if (plot.plant) {
+          // Fetch plant data and set it
+          // For now, we'll need to handle this separately
+          baseGarden[arrayRow][arrayCol].plant = null; // Will be populated by separate plant fetch
+        }
+      }
+    }
+  }
+
+  return baseGarden;
+}
+
 export function meta({}: Route.MetaArgs) {
-  return [
-    { title: "Garden - Fleurish" },
-    { name: "description", content: "Your garden" },
-  ];
+  return [{ title: "Garden - Fleurish" }, { name: "description", content: "Your garden" }];
 }
 
 export default function Garden() {
-  const { user } = useAuth();
-  const [garden, setGarden] = useState<GardenCell[][]>(createInitialGarden());
-  const [isInventoryOpen, setIsInventoryOpen] = useState(false);
-  const [selectedPlant, setSelectedPlant] = useState<PlantType | null>(null);
-  const [gems, setGems] = useState(0);
-  const [coins, setCoins] = useState(75);
   const [gardenName, setGardenName] = useState("");
   const [showNamePlaceholder, setShowNamePlaceholder] = useState(false);
   const [gardenId, setGardenId] = useState<string | null>(null);
-  const [selectedLand, setSelectedLand] = useState(false);
-  const [isEditingName, setIsEditingName] = useState(false);
   const [hasUnsavedNameChanges, setHasUnsavedNameChanges] = useState(false);
   const [nameSaveStatus, setNameSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [debugInfo, setDebugInfo] = useState<string>("");
-  const [purchasedPlants, setPurchasedPlants] = useState<Record<PlantType, number>>({
-    pink: 0,
-    purple: 0,
-    yellow: 0,
-  });
-  const [harvestedPlants, setHarvestedPlants] = useState<Record<PlantType, number>>({
-    pink: 0,
-    purple: 0,
-    yellow: 0,
-  });
+  const { user, refreshUser } = useAuth();
+  const [garden, setGarden] = useState<GardenCell[][]>(createInitialGarden());
+  const [isInventoryOpen, setIsInventoryOpen] = useState(false);
+  const [selectedPlant, setSelectedPlant] = useState<PlantType | null>(null);
+  const [userGardenId, setUserGardenId] = useState<string | null>(null);
+  const [selectedLand, setSelectedLand] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [purchasedPlants, setPurchasedPlants] = useState<Partial<Record<PlantType, number>>>({});
+  const [harvestedPlants, setHarvestedPlants] = useState<Partial<Record<PlantType, number>>>({});
   const [selectedHarvestedPlant, setSelectedHarvestedPlant] = useState<PlantType | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isVisiting, setIsVisiting] = useState(false);
   const [visitingGardenName, setVisitingGardenName] = useState("");
   const [isLoadingGarden, setIsLoadingGarden] = useState(false);
+  const [plantPrices, setPlantPrices] = useState<Partial<Record<PlantType, number>>>({});
+  const [plantTypeIds, setPlantTypeIds] = useState<Partial<Record<PlantType, string>>>({});
   const landPrice = 5; // Price in gems to buy land
-  const plantPrices: Record<PlantType, number> = { pink: 30, yellow: 20, purple: 15 };
   const harvestPrice = 60; // Price in coins when selling harvested plants
-  
+
   // User's community affiliations - easily replaceable with backend user data
   const userCommunities = ["Downtown Gardeners", "Organic Growers"];
-  
+
   const gardenNameInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch plant types from API
+  useEffect(() => {
+    const fetchPlantTypes = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}plant-types`);
+        if (response.ok) {
+          const result = await response.json();
+          const plants = result.data || [];
+          const prices: Partial<Record<PlantType, number>> = {};
+          const typeIds: Partial<Record<PlantType, string>> = {};
+          const initialPurchased: Partial<Record<PlantType, number>> = {};
+          const initialHarvested: Partial<Record<PlantType, number>> = {};
+
+          plants.forEach((plant: any) => {
+            const plantType = plant.plantName.toLowerCase() as PlantType;
+            prices[plantType] = plant.price;
+            typeIds[plantType] = plant.plantTypeMongoId;
+            initialPurchased[plantType] = 0;
+            initialHarvested[plantType] = 0;
+          });
+
+          setPlantPrices(prices);
+          setPlantTypeIds(typeIds);
+          setPurchasedPlants(initialPurchased);
+          setHarvestedPlants(initialHarvested);
+        }
+      } catch (error) {
+        console.error("Failed to fetch plant types:", error);
+      }
+    };
+
+    fetchPlantTypes();
+  }, []);
+
+  // Fetch user's garden and plots
+  useEffect(() => {
+    const fetchUserGarden = async () => {
+      if (!user?.gardenId) return;
+
+      const gardenId = typeof user.gardenId === "string" ? user.gardenId : (user.gardenId as any)?._id || (user.gardenId as any)?.gardenMongoId;
+
+      if (!gardenId) return;
+
+      try {
+        const token = localStorage.getItem("auth_token");
+
+        // Fetch user's garden directly by gardenId
+        const gardenResponse = await fetch(`${API_BASE_URL}gardens/${gardenId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (gardenResponse.ok) {
+          const gardenResult = await gardenResponse.json();
+          const userGarden = gardenResult.data;
+
+          if (userGarden) {
+            setUserGardenId(userGarden.gardenMongoId || gardenId);
+            setGardenName(userGarden.name || "My Garden");
+
+            // Use plots array from garden data
+            const plots = userGarden.plots || [];
+
+            // Convert plots to garden grid
+            const newGarden = createGardenFromPlots(plots);
+            setGarden(newGarden);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch user garden:", error);
+      }
+    };
+
+    fetchUserGarden();
+  }, [user?.gardenId]);
+
+  // Helper to refetch garden data
+  const refetchGarden = async () => {
+    if (!user?.gardenId || !userGardenId) return;
+
+    try {
+      const token = localStorage.getItem("auth_token");
+      const gardenResponse = await fetch(`${API_BASE_URL}gardens/${userGardenId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (gardenResponse.ok) {
+        const gardenResult = await gardenResponse.json();
+        const userGarden = gardenResult.data;
+        const plots = userGarden?.plots || [];
+        const newGarden = createGardenFromPlots(plots);
+        setGarden(newGarden);
+      }
+    } catch (error) {
+      console.error("Failed to refetch garden:", error);
+    }
+  };
+
+  // Fetch user's inventory
+  const fetchUserInventory = async () => {
+    if (!user?.id) return;
+
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(`${API_BASE_URL}plants?userId=${user.id}&isPlanted=false`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const plants = result.data || [];
+
+        const purchased: Partial<Record<PlantType, number>> = {};
+        const harvested: Partial<Record<PlantType, number>> = {};
+
+        plants.forEach((plant: any) => {
+          const plantType = plant.plantType?.plantName?.toLowerCase() as PlantType;
+          if (plantType) {
+            if (plant.growth === 0) {
+              purchased[plantType] = (purchased[plantType] || 0) + 1;
+            } else if (plant.growth === 2) {
+              harvested[plantType] = (harvested[plantType] || 0) + 1;
+            }
+          }
+        });
+
+        setPurchasedPlants(purchased);
+        setHarvestedPlants(harvested);
+      }
+    } catch (error) {
+      console.error("Failed to fetch user inventory:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.id && Object.keys(plantPrices).length > 0) {
+      fetchUserInventory();
+    }
+  }, [user?.id, plantPrices]);
 
   const handleCellClick = (row: number, col: number) => {
     const cell = garden[row][col];
-    
+
     // If there's a selected plant and the cell is dirt with no plant, plant it
-    if (selectedPlant && cell.terrain === "dirt" && !cell.plant && purchasedPlants[selectedPlant] > 0) {
+    if (selectedPlant && cell.terrain === "dirt" && !cell.plant && (purchasedPlants[selectedPlant] ?? 0) > 0) {
       const newGarden = garden.map((r) => [...r]);
       newGarden[row][col] = {
         ...cell,
@@ -70,7 +246,7 @@ export default function Garden() {
       setGarden(newGarden);
       setPurchasedPlants((prev) => ({
         ...prev,
-        [selectedPlant]: prev[selectedPlant] - 1,
+        [selectedPlant]: (prev[selectedPlant] ?? 0) - 1,
       }));
       setSelectedPlant(null); // Deselect after planting
     }
@@ -82,8 +258,7 @@ export default function Garden() {
         plant: null,
       };
       setGarden(newGarden);
-      // Add coins when harvesting (you can adjust this logic)
-      setCoins((prev) => prev + 10);
+      // TODO: Update user's coins in backend when harvesting
     }
   };
 
@@ -125,21 +300,58 @@ export default function Garden() {
 
   const handleSelectLand = () => {
     // Toggle land selection - user must click land in shop to select it
-    if (gems >= landPrice) {
+    const userGems = user?.gems ?? 0;
+    if (userGems >= landPrice) {
       setSelectedLand(!selectedLand);
       setSelectedPlant(null); // Deselect plant when selecting land
     }
   };
 
-  const handleBuyPlant = (plantType: PlantType) => {
+  const handleBuyPlant = async (plantType: PlantType) => {
     const price = plantPrices[plantType];
-    if (coins >= price) {
-      setPurchasedPlants((prev) => ({
-        ...prev,
-        [plantType]: (prev[plantType] || 0) + 1,
-      }));
-      setCoins((prev) => prev - price);
-      // TODO: Call backend API to update inventory and deduct coins
+    const plantTypeId = plantTypeIds[plantType];
+    const userCoins = user?.coins ?? 0;
+    if (price && plantTypeId && userCoins >= price && user?.id) {
+      try {
+        const token = localStorage.getItem("auth_token");
+
+        // Remove coins
+        const coinsResponse = await fetch(`${API_BASE_URL}users/coins/remove`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            amount: price,
+          }),
+        });
+
+        if (coinsResponse.ok) {
+          // Create plant in inventory
+          const plantResponse = await fetch(`${API_BASE_URL}plants`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              growth: 0,
+              plantTypeId: plantTypeId,
+              userId: user.id,
+              isPlanted: false,
+            }),
+          });
+
+          if (plantResponse.ok) {
+            await refreshUser();
+            await fetchUserInventory();
+          }
+        }
+      } catch (error) {
+        console.error("Failed to buy plant:", error);
+      }
     }
   };
 
@@ -151,7 +363,7 @@ export default function Garden() {
         ...prev,
         [cell.plant!.type]: (prev[cell.plant!.type] || 0) + 1,
       }));
-      
+
       // Remove from garden
       const newGarden = garden.map((r) => [...r]);
       newGarden[row][col] = {
@@ -162,17 +374,35 @@ export default function Garden() {
     }
   };
 
-  const handleSellPlant = (plantType: PlantType) => {
-    if (harvestedPlants[plantType] > 0) {
-      setHarvestedPlants((prev) => ({
-        ...prev,
-        [plantType]: prev[plantType] - 1,
-      }));
-      setCoins((prev) => prev + harvestPrice);
-      if (selectedHarvestedPlant === plantType && harvestedPlants[plantType] === 1) {
-        setSelectedHarvestedPlant(null);
+  const handleSellPlant = async (plantType: PlantType) => {
+    if ((harvestedPlants[plantType] ?? 0) > 0 && user?.id) {
+      try {
+        const token = localStorage.getItem("auth_token");
+        const response = await fetch(`${API_BASE_URL}users/coins/add`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            amount: harvestPrice,
+          }),
+        });
+
+        if (response.ok) {
+          setHarvestedPlants((prev) => ({
+            ...prev,
+            [plantType]: (prev[plantType] ?? 0) - 1,
+          }));
+          if (selectedHarvestedPlant === plantType && harvestedPlants[plantType] === 1) {
+            setSelectedHarvestedPlant(null);
+          }
+          await refreshUser();
+        }
+      } catch (error) {
+        console.error("Failed to sell plant:", error);
       }
-      // TODO: Call backend API to update inventory and add coins
     }
   };
 
@@ -278,29 +508,69 @@ export default function Garden() {
   }, [gardenId, isVisiting]);
 
   const handleBuyDirt = (row: number, col: number) => {
+  const handleBuyDirt = async (row: number, col: number) => {
     const cell = garden[row][col];
-    
+    const userGems = user?.gems ?? 0;
+
     // Only allow buying dirt on MM_grass cells when land is selected
-    if (cell.terrain === "MM_grass" && selectedLand && gems >= landPrice) {
-      const newGarden = garden.map((r) => [...r]);
-      newGarden[row][col] = {
-        ...cell,
-        terrain: "dirt",
-      };
-      setGarden(newGarden);
-      setGems((prev) => prev - landPrice);
-      setSelectedLand(false); // Deselect after placing land
-      
-      // TODO: Call backend API to update garden and deduct gems
-      // Example: await updateGardenCell(row, col, "dirt");
-      // Example: await updateCurrency({ gems: gems - landPrice });
+    if (cell.terrain === "MM_grass" && selectedLand && userGems >= landPrice && user?.id && userGardenId) {
+      try {
+        const token = localStorage.getItem("auth_token");
+
+        // Convert array indices to center-based coordinates
+        // Center is at index (2,2)
+        const centerRow = 2;
+        const centerCol = 2;
+        const plotRow = centerRow - row;
+        const plotCol = col - centerCol;
+
+        console.log(`Buying dirt at array [${row},${col}] -> database coords (${plotRow},${plotCol})`);
+
+        // Remove gems
+        const gemsResponse = await fetch(`${API_BASE_URL}users/gems/remove`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            amount: landPrice,
+          }),
+        });
+
+        if (gemsResponse.ok) {
+          // Create plot in database using the createPlot endpoint
+          const plotResponse = await fetch(`${API_BASE_URL}plots/createPlot`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              row: plotRow,
+              column: plotCol,
+              plantId: null,
+              gardenId: userGardenId,
+            }),
+          });
+
+          if (plotResponse.ok) {
+            setSelectedLand(false); // Deselect after placing land
+            await refreshUser();
+            await refetchGarden(); // Refetch garden to get updated plots
+          }
+        }
+      } catch (error) {
+        console.error("Failed to buy dirt:", error);
+      }
     }
   };
 
   return (
     <div className="h-screen bg-[#FFF9EB] flex flex-col overflow-hidden">
       <Navbar />
-      
+
       <main className="flex-1 pt-[73.6px] pb-20 px-4 sm:px-6 lg:px-8 flex flex-col overflow-hidden">
         <div className="pt-6 pb-4 flex items-center justify-center gap-2">
           <input
@@ -378,13 +648,11 @@ export default function Garden() {
                 alt={selectedPlant}
                 className="w-5 h-5 object-contain pixelated"
               />
-              <span className="text-sm font-semibold text-gray-700 capitalize">
-                Selected: {selectedPlant} - Click on dirt to plant
-              </span>
+              <span className="text-sm font-semibold text-gray-700 capitalize">Selected: {selectedPlant} - Click on dirt to plant</span>
             </span>
           </div>
         )}
-        
+
         {/* Selected land indicator */}
         {selectedLand && (
           <div className="text-center mb-4">
@@ -394,9 +662,7 @@ export default function Garden() {
                 alt="Land"
                 className="w-5 h-5 object-contain pixelated"
               />
-              <span className="text-sm font-semibold text-gray-700">
-                Land selected - Click on a grass to place land
-              </span>
+              <span className="text-sm font-semibold text-gray-700">Land selected - Click on a grass to place land</span>
             </span>
           </div>
         )}
@@ -406,7 +672,7 @@ export default function Garden() {
           {/* Garden Grid */}
           <div
             className={`
-              flex-shrink-0
+              shrink-0
               bg-transparent flex items-center justify-center
               ${isInventoryOpen ? "w-full lg:w-2/3 h-full" : "w-full h-full"}
             `}
@@ -420,25 +686,25 @@ export default function Garden() {
                 onBuyDirt={handleBuyDirt}
                 onHarvestPlant={handleHarvestPlant}
                 landPrice={landPrice}
-                gems={gems}
+                gems={user?.gems ?? 0}
               />
             </div>
           </div>
 
           {/* Inventory Panel */}
           {isInventoryOpen && (
-            <div className="hidden lg:flex w-1/3 flex-shrink-0 h-full min-w-0">
+            <div className="hidden lg:flex w-1/3 shrink-0 h-full min-w-0">
               <InventoryPanel
                 onSelectPlant={setSelectedPlant}
                 selectedPlant={selectedPlant}
                 onSelectLand={handleSelectLand}
                 landPrice={landPrice}
-                gems={gems}
+                gems={user?.gems ?? 0}
                 onBuyPlant={handleBuyPlant}
-                plantPrices={plantPrices}
-                coins={coins}
-                purchasedPlants={purchasedPlants}
-                harvestedPlants={harvestedPlants}
+                plantPrices={plantPrices as Record<PlantType, number>}
+                coins={user?.coins ?? 0}
+                purchasedPlants={purchasedPlants as Record<PlantType, number>}
+                harvestedPlants={harvestedPlants as Record<PlantType, number>}
                 onSellPlant={handleSellPlant}
                 harvestPrice={harvestPrice}
               />
@@ -456,12 +722,12 @@ export default function Garden() {
                   selectedPlant={selectedPlant}
                   onSelectLand={handleSelectLand}
                   landPrice={landPrice}
-                  gems={gems}
+                  gems={user?.gems ?? 0}
                   onBuyPlant={handleBuyPlant}
-                  plantPrices={plantPrices}
-                  coins={coins}
-                  purchasedPlants={purchasedPlants}
-                  harvestedPlants={harvestedPlants}
+                  plantPrices={plantPrices as Record<PlantType, number>}
+                  coins={user?.coins ?? 0}
+                  purchasedPlants={purchasedPlants as Record<PlantType, number>}
+                  harvestedPlants={harvestedPlants as Record<PlantType, number>}
                   onSellPlant={handleSellPlant}
                   harvestPrice={harvestPrice}
                   onClose={() => setIsInventoryOpen(false)}
@@ -475,8 +741,8 @@ export default function Garden() {
       <GardenFooter
         onBackpackClick={handleBackpackClick}
         onCommunityClick={handleCommunityClick}
-        gems={gems}
-        coins={coins}
+        gems={user?.gems ?? 0}
+        coins={user?.coins ?? 0}
         isVisiting={isVisiting}
         onReturnHome={handleReturnHome}
       />

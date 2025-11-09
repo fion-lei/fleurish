@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { AuthLayout } from "../components/AuthLayout";
 import { FormInput } from "../components/FormInput";
+import { PasswordInput } from "../components/PasswordInput";
 import { SubmitButton } from "../components/SubmitButton";
 import { useAuth } from "../components/AuthContext";
 import type { Route } from "./+types/register";
@@ -18,6 +19,18 @@ export default function Register() {
   const { register } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordMatchError, setPasswordMatchError] = useState<string | null>(null);
+
+  // Check if passwords match in real-time
+  const checkPasswordMatch = (pwd: string, confirmPwd: string) => {
+    if (confirmPwd && pwd !== confirmPwd) {
+      setPasswordMatchError("Passwords do not match");
+    } else {
+      setPasswordMatchError(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -55,7 +68,7 @@ export default function Register() {
         </h2>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-[11.2px]">
             {error}
           </div>
         )}
@@ -72,29 +85,44 @@ export default function Register() {
             disabled={isSubmitting}
           />
 
-          <FormInput
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             placeholder="Password"
             required
             aria-label="Password"
             autoComplete="new-password"
             minLength={8}
             disabled={isSubmitting}
+            onChange={(e) => {
+              const newPassword = e.target.value;
+              setPassword(newPassword);
+              checkPasswordMatch(newPassword, confirmPassword);
+            }}
           />
 
-          <FormInput
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            placeholder="Confirm Password"
-            required
-            aria-label="Confirm password"
-            autoComplete="new-password"
-            minLength={8}
-            disabled={isSubmitting}
-          />
+          <div>
+            <PasswordInput
+              id="confirmPassword"
+              name="confirmPassword"
+              placeholder="Confirm Password"
+              required
+              aria-label="Confirm password"
+              autoComplete="new-password"
+              minLength={8}
+              disabled={isSubmitting}
+              onChange={(e) => {
+                const newConfirmPassword = e.target.value;
+                setConfirmPassword(newConfirmPassword);
+                checkPasswordMatch(password, newConfirmPassword);
+              }}
+            />
+            {passwordMatchError && (
+              <p className="text-red-500 text-[10px] mt-1 ml-1">
+                {passwordMatchError}
+              </p>
+            )}
+          </div>
 
           <SubmitButton disabled={isSubmitting}>
             {isSubmitting ? "REGISTERING..." : "REGISTER"}

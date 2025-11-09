@@ -22,23 +22,16 @@ export default function Garden() {
   const [gardenName, setGardenName] = useState("Garden Name");
   const [selectedLand, setSelectedLand] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
-  const [purchasedPlants, setPurchasedPlants] = useState<Record<PlantType, number>>({
-    pink: 0,
-    purple: 0,
-    yellow: 0,
-  });
-  const [harvestedPlants, setHarvestedPlants] = useState<Record<PlantType, number>>({
-    pink: 0,
-    purple: 0,
-    yellow: 0,
-  });
+  const [purchasedPlants, setPurchasedPlants] = useState<Partial<Record<PlantType, number>>>({});
+  const [harvestedPlants, setHarvestedPlants] = useState<Partial<Record<PlantType, number>>>({});
   const [selectedHarvestedPlant, setSelectedHarvestedPlant] = useState<PlantType | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isVisiting, setIsVisiting] = useState(false);
   const [visitingGardenName, setVisitingGardenName] = useState("");
   const [isLoadingGarden, setIsLoadingGarden] = useState(false);
+  const [plantPrices, setPlantPrices] = useState<Partial<Record<PlantType, number>>>({});
+  const [plantTypeIds, setPlantTypeIds] = useState<Partial<Record<PlantType, string>>>({});
   const landPrice = 5; // Price in gems to buy land
-  const plantPrices: Record<PlantType, number> = { pink: 30, yellow: 20, purple: 15 };
   const harvestPrice = 60; // Price in coins when selling harvested plants
 
   // User's community affiliations - easily replaceable with backend user data
@@ -46,11 +39,89 @@ export default function Garden() {
 
   const gardenNameInputRef = useRef<HTMLInputElement>(null);
 
+  // Fetch plant types from API
+  useEffect(() => {
+    const fetchPlantTypes = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}plant-types`);
+        if (response.ok) {
+          const result = await response.json();
+          const plants = result.data || [];
+          const prices: Partial<Record<PlantType, number>> = {};
+          const typeIds: Partial<Record<PlantType, string>> = {};
+          const initialPurchased: Partial<Record<PlantType, number>> = {};
+          const initialHarvested: Partial<Record<PlantType, number>> = {};
+
+          plants.forEach((plant: any) => {
+            const plantType = plant.plantName.toLowerCase() as PlantType;
+            prices[plantType] = plant.price;
+            typeIds[plantType] = plant.plantTypeMongoId;
+            initialPurchased[plantType] = 0;
+            initialHarvested[plantType] = 0;
+          });
+
+          setPlantPrices(prices);
+          setPlantTypeIds(typeIds);
+          setPurchasedPlants(initialPurchased);
+          setHarvestedPlants(initialHarvested);
+        }
+      } catch (error) {
+        console.error("Failed to fetch plant types:", error);
+      }
+    };
+
+    fetchPlantTypes();
+  }, []);
+
+  // Fetch user's inventory
+  const fetchUserInventory = async () => {
+    if (!user?.id) return;
+
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(`${API_BASE_URL}plants?userId=${user.id}&isPlanted=false`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const plants = result.data || [];
+
+        const purchased: Partial<Record<PlantType, number>> = {};
+        const harvested: Partial<Record<PlantType, number>> = {};
+
+        plants.forEach((plant: any) => {
+          const plantType = plant.plantType?.plantName?.toLowerCase() as PlantType;
+          if (plantType) {
+            if (plant.growth === 0) {
+              purchased[plantType] = (purchased[plantType] || 0) + 1;
+            } else if (plant.growth === 2) {
+              harvested[plantType] = (harvested[plantType] || 0) + 1;
+            }
+          }
+        });
+
+        setPurchasedPlants(purchased);
+        setHarvestedPlants(harvested);
+      }
+    } catch (error) {
+      console.error("Failed to fetch user inventory:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.id && Object.keys(plantPrices).length > 0) {
+      fetchUserInventory();
+    }
+  }, [user?.id, plantPrices]);
+
   const handleCellClick = (row: number, col: number) => {
     const cell = garden[row][col];
 
     // If there's a selected plant and the cell is dirt with no plant, plant it
-    if (selectedPlant && cell.terrain === "dirt" && !cell.plant && purchasedPlants[selectedPlant] > 0) {
+    if (selectedPlant && cell.terrain === "dirt" && !cell.plant && (purchasedPlants[selectedPlant] ?? 0) > 0) {
       const newGarden = garden.map((r) => [...r]);
       newGarden[row][col] = {
         ...cell,
@@ -62,7 +133,7 @@ export default function Garden() {
       setGarden(newGarden);
       setPurchasedPlants((prev) => ({
         ...prev,
-        [selectedPlant]: prev[selectedPlant] - 1,
+        [selectedPlant]: (prev[selectedPlant] ?? 0) - 1,
       }));
       setSelectedPlant(null); // Deselect after planting
     }
@@ -124,11 +195,14 @@ export default function Garden() {
 
   const handleBuyPlant = async (plantType: PlantType) => {
     const price = plantPrices[plantType];
+    const plantTypeId = plantTypeIds[plantType];
     const userCoins = user?.coins ?? 0;
-    if (userCoins >= price && user?.id) {
+    if (price && plantTypeId && userCoins >= price && user?.id) {
       try {
         const token = localStorage.getItem("auth_token");
-        const response = await fetch(`${API_BASE_URL}users/coins/remove`, {
+
+        // Remove coins
+        const coinsResponse = await fetch(`${API_BASE_URL}users/coins/remove`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -140,12 +214,26 @@ export default function Garden() {
           }),
         });
 
-        if (response.ok) {
-          setPurchasedPlants((prev) => ({
-            ...prev,
-            [plantType]: (prev[plantType] || 0) + 1,
-          }));
-          await refreshUser();
+        if (coinsResponse.ok) {
+          // Create plant in inventory
+          const plantResponse = await fetch(`${API_BASE_URL}plants`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              growth: 0,
+              plantTypeId: plantTypeId,
+              userId: user.id,
+              isPlanted: false,
+            }),
+          });
+
+          if (plantResponse.ok) {
+            await refreshUser();
+            await fetchUserInventory();
+          }
         }
       } catch (error) {
         console.error("Failed to buy plant:", error);
@@ -173,7 +261,7 @@ export default function Garden() {
   };
 
   const handleSellPlant = async (plantType: PlantType) => {
-    if (harvestedPlants[plantType] > 0 && user?.id) {
+    if ((harvestedPlants[plantType] ?? 0) > 0 && user?.id) {
       try {
         const token = localStorage.getItem("auth_token");
         const response = await fetch(`${API_BASE_URL}users/coins/add`, {
@@ -191,7 +279,7 @@ export default function Garden() {
         if (response.ok) {
           setHarvestedPlants((prev) => ({
             ...prev,
-            [plantType]: prev[plantType] - 1,
+            [plantType]: (prev[plantType] ?? 0) - 1,
           }));
           if (selectedHarvestedPlant === plantType && harvestedPlants[plantType] === 1) {
             setSelectedHarvestedPlant(null);
@@ -352,17 +440,14 @@ export default function Garden() {
                 onSelectPlant={setSelectedPlant}
                 selectedPlant={selectedPlant}
                 onSelectLand={handleSelectLand}
-                selectedLand={selectedLand}
                 landPrice={landPrice}
                 gems={user?.gems ?? 0}
                 onBuyPlant={handleBuyPlant}
-                plantPrices={plantPrices}
+                plantPrices={plantPrices as Record<PlantType, number>}
                 coins={user?.coins ?? 0}
-                purchasedPlants={purchasedPlants}
-                harvestedPlants={harvestedPlants}
+                purchasedPlants={purchasedPlants as Record<PlantType, number>}
+                harvestedPlants={harvestedPlants as Record<PlantType, number>}
                 onSellPlant={handleSellPlant}
-                selectedHarvestedPlant={selectedHarvestedPlant}
-                onSelectHarvestedPlant={setSelectedHarvestedPlant}
                 harvestPrice={harvestPrice}
               />
             </div>
@@ -378,17 +463,14 @@ export default function Garden() {
                   onSelectPlant={setSelectedPlant}
                   selectedPlant={selectedPlant}
                   onSelectLand={handleSelectLand}
-                  selectedLand={selectedLand}
                   landPrice={landPrice}
                   gems={user?.gems ?? 0}
                   onBuyPlant={handleBuyPlant}
-                  plantPrices={plantPrices}
+                  plantPrices={plantPrices as Record<PlantType, number>}
                   coins={user?.coins ?? 0}
-                  purchasedPlants={purchasedPlants}
-                  harvestedPlants={harvestedPlants}
+                  purchasedPlants={purchasedPlants as Record<PlantType, number>}
+                  harvestedPlants={harvestedPlants as Record<PlantType, number>}
                   onSellPlant={handleSellPlant}
-                  selectedHarvestedPlant={selectedHarvestedPlant}
-                  onSelectHarvestedPlant={setSelectedHarvestedPlant}
                   harvestPrice={harvestPrice}
                   onClose={() => setIsInventoryOpen(false)}
                 />

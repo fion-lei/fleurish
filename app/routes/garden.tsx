@@ -8,12 +8,14 @@ import { VisitGardenModal } from "../components/VisitGardenModal";
 import { useAuth } from "../components/AuthContext";
 import type { Route } from "./+types/garden";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Garden - Fleurish" }, { name: "description", content: "Your garden" }];
 }
 
 export default function Garden() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [garden, setGarden] = useState<GardenCell[][]>(createInitialGarden());
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [selectedPlant, setSelectedPlant] = useState<PlantType | null>(null);
@@ -120,15 +122,34 @@ export default function Garden() {
     }
   };
 
-  const handleBuyPlant = (plantType: PlantType) => {
+  const handleBuyPlant = async (plantType: PlantType) => {
     const price = plantPrices[plantType];
     const userCoins = user?.coins ?? 0;
-    if (userCoins >= price) {
-      setPurchasedPlants((prev) => ({
-        ...prev,
-        [plantType]: (prev[plantType] || 0) + 1,
-      }));
-      // TODO: Call backend API to update inventory and deduct coins
+    if (userCoins >= price && user?.id) {
+      try {
+        const token = localStorage.getItem("auth_token");
+        const response = await fetch(`${API_BASE_URL}users/coins/remove`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            amount: price,
+          }),
+        });
+
+        if (response.ok) {
+          setPurchasedPlants((prev) => ({
+            ...prev,
+            [plantType]: (prev[plantType] || 0) + 1,
+          }));
+          await refreshUser();
+        }
+      } catch (error) {
+        console.error("Failed to buy plant:", error);
+      }
     }
   };
 
@@ -151,16 +172,35 @@ export default function Garden() {
     }
   };
 
-  const handleSellPlant = (plantType: PlantType) => {
-    if (harvestedPlants[plantType] > 0) {
-      setHarvestedPlants((prev) => ({
-        ...prev,
-        [plantType]: prev[plantType] - 1,
-      }));
-      if (selectedHarvestedPlant === plantType && harvestedPlants[plantType] === 1) {
-        setSelectedHarvestedPlant(null);
+  const handleSellPlant = async (plantType: PlantType) => {
+    if (harvestedPlants[plantType] > 0 && user?.id) {
+      try {
+        const token = localStorage.getItem("auth_token");
+        const response = await fetch(`${API_BASE_URL}users/coins/add`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            amount: harvestPrice,
+          }),
+        });
+
+        if (response.ok) {
+          setHarvestedPlants((prev) => ({
+            ...prev,
+            [plantType]: prev[plantType] - 1,
+          }));
+          if (selectedHarvestedPlant === plantType && harvestedPlants[plantType] === 1) {
+            setSelectedHarvestedPlant(null);
+          }
+          await refreshUser();
+        }
+      } catch (error) {
+        console.error("Failed to sell plant:", error);
       }
-      // TODO: Call backend API to update inventory and add coins
     }
   };
 
@@ -175,23 +215,39 @@ export default function Garden() {
     }
   }, [isEditingName]);
 
-  const handleBuyDirt = (row: number, col: number) => {
+  const handleBuyDirt = async (row: number, col: number) => {
     const cell = garden[row][col];
     const userGems = user?.gems ?? 0;
 
     // Only allow buying dirt on MM_grass cells when land is selected
-    if (cell.terrain === "MM_grass" && selectedLand && userGems >= landPrice) {
-      const newGarden = garden.map((r) => [...r]);
-      newGarden[row][col] = {
-        ...cell,
-        terrain: "dirt",
-      };
-      setGarden(newGarden);
-      setSelectedLand(false); // Deselect after placing land
+    if (cell.terrain === "MM_grass" && selectedLand && userGems >= landPrice && user?.id) {
+      try {
+        const token = localStorage.getItem("auth_token");
+        const response = await fetch(`${API_BASE_URL}users/gems/remove`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            amount: landPrice,
+          }),
+        });
 
-      // TODO: Call backend API to update garden and deduct gems
-      // Example: await updateGardenCell(row, col, "dirt");
-      // Example: await updateCurrency({ gems: gems - landPrice });
+        if (response.ok) {
+          const newGarden = garden.map((r) => [...r]);
+          newGarden[row][col] = {
+            ...cell,
+            terrain: "dirt",
+          };
+          setGarden(newGarden);
+          setSelectedLand(false); // Deselect after placing land
+          await refreshUser();
+        }
+      } catch (error) {
+        console.error("Failed to buy dirt:", error);
+      }
     }
   };
 

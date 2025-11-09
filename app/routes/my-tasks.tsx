@@ -53,8 +53,10 @@ export default function MyTasks() {
   const selectedTask =
     sampleTasks.find((task) => task.id === selectedTaskId) || null;
   return (
-    <main className="pt-16 p-4 container mx-auto">
-      <h1 className="text-2xl font-semibold p-4">Request Board</h1>
+    <main className="pt-20 px-4 sm:px-6 md:px-10 lg:px-16 container mx-auto">
+      <h1 className="text-2xl font-semibold mb-4 ml-6 sm:ml-8 md:ml-40">
+        Request Board
+      </h1>
 
       <div className="flex justify-center">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 h-[calc(100vh-5rem)]">

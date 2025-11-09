@@ -6,7 +6,6 @@ import { InventoryPanel } from "../components/InventoryPanel";
 import { Navbar } from "../components/Navbar";
 import { useAuth } from "../components/AuthContext";
 import { VisitGardenModal } from "../components/VisitGardenModal";
-import { useAuth } from "../components/AuthContext";
 import type { Route } from "./+types/garden";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -507,7 +506,6 @@ export default function Garden() {
     loadGardenName();
   }, [gardenId, isVisiting]);
 
-  const handleBuyDirt = (row: number, col: number) => {
   const handleBuyDirt = async (row: number, col: number) => {
     const cell = garden[row][col];
     const userGems = user?.gems ?? 0;

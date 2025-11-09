@@ -27,9 +27,9 @@ export function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 pt-4">
       <div className="max-w-[1536px] mx-auto pl-4 pr-8 sm:pl-6 sm:pr-12 lg:pl-8 lg:pr-16">
-        <div className="flex items-center justify-between h-[57.6px]">
+        <div className="flex items-center justify-center h-[57.6px] relative">
           {/* Brand logo and title - links to garden page */}
-          <Link to="/garden" className="flex items-end gap-2">
+          <Link to="/garden" className="flex items-end gap-2 absolute left-0">
             <h1 className="text-[26.46px] font-bold leading-none">
               <span className="text-fleur-green">fleur</span>
               <span className="text-fleur-purple">ish</span>
@@ -42,7 +42,7 @@ export function Navbar() {
             />
           </Link>
 
-          {/* Navigation links with active state highlighting */}
+          {/* Navigation links with active state highlighting - centered */}
           <div className="flex items-center rounded-pill border border-fleur-green/60 bg-white px-2 py-1 gap-2">
             {navItems.map((item) => {
               const isActive = currentPath === item.path;

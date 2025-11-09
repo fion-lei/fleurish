@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import TaskDetails from "~/components/TaskDetails";
-import TaskList from "~/components/TaskList";
 import type { Task } from "~/components/TaskList";
 import type { Route } from "./+types/my-tasks";
 import { Navbar } from "../components/Navbar";
 import { useAuth } from "~/components/AuthContext";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+import TaskList from "~/components/TaskList";
 
 export function meta({}: Route.MetaArgs) {
   return [

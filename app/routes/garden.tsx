@@ -36,11 +36,27 @@ function createGardenFromPlots(plots: any[]): GardenCell[][] {
         // This plot exists, make it dirt
         baseGarden[arrayRow][arrayCol].terrain = "dirt";
 
-        // Add plant if it exists
+        // Add plant if it exists on the plot
         if (plot.plant) {
-          // Fetch plant data and set it
-          // For now, we'll need to handle this separately
-          baseGarden[arrayRow][arrayCol].plant = null; // Will be populated by separate plant fetch
+          const plantData = plot.plant;
+          const plantTypeName = plantData.plantType?.plantName?.toLowerCase() as PlantType;
+          const growth = plantData.growth || 0;
+
+          if (plantTypeName) {
+            // Calculate stage from growth value
+            // Stage 0: 0-33, Stage 1: 34-66, Stage 2: 67-100
+            let stage: 0 | 1 | 2 = 0;
+            if (growth >= 67) {
+              stage = 2;
+            } else if (growth >= 34) {
+              stage = 1;
+            }
+
+            baseGarden[arrayRow][arrayCol].plant = {
+              type: plantTypeName,
+              stage: stage,
+            };
+          }
         }
       }
     }
@@ -71,6 +87,8 @@ export default function Garden() {
   const [isLoadingGarden, setIsLoadingGarden] = useState(false);
   const [plantPrices, setPlantPrices] = useState<Partial<Record<PlantType, number>>>({});
   const [plantTypeIds, setPlantTypeIds] = useState<Partial<Record<PlantType, string>>>({});
+  const [plotsData, setPlotsData] = useState<any[]>([]); // Store plot data with IDs
+  const [inventoryPlants, setInventoryPlants] = useState<any[]>([]); // Store full plant objects from inventory
   const landPrice = 5; // Price in gems to buy land
   const harvestPrice = 60; // Price in coins when selling harvested plants
 
@@ -143,6 +161,9 @@ export default function Garden() {
             // Use plots array from garden data
             const plots = userGarden.plots || [];
 
+            // Store plots data
+            setPlotsData(plots);
+
             // Convert plots to garden grid
             const newGarden = createGardenFromPlots(plots);
             setGarden(newGarden);
@@ -172,6 +193,10 @@ export default function Garden() {
         const gardenResult = await gardenResponse.json();
         const userGarden = gardenResult.data;
         const plots = userGarden?.plots || [];
+
+        // Store plots data
+        setPlotsData(plots);
+
         const newGarden = createGardenFromPlots(plots);
         setGarden(newGarden);
       }
@@ -195,6 +220,9 @@ export default function Garden() {
       if (response.ok) {
         const result = await response.json();
         const plants = result.data || [];
+
+        // Store full plant objects for planting
+        setInventoryPlants(plants);
 
         const purchased: Partial<Record<PlantType, number>> = {};
         const harvested: Partial<Record<PlantType, number>> = {};
@@ -224,25 +252,122 @@ export default function Garden() {
     }
   }, [user?.id, plantPrices]);
 
-  const handleCellClick = (row: number, col: number) => {
+  // Growth system polling
+  useEffect(() => {
+    if (!user?.id || isVisiting) return;
+
+    const pollGrowthUpdates = async () => {
+      try {
+        const token = localStorage.getItem("auth_token");
+        const response = await fetch(`${API_BASE_URL}growth/update/${user.id}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          
+          if (result.plantsGrowthUpdates && result.plantsGrowthUpdates.length > 0) {
+            console.log(`${result.plantsGrowthUpdates.length} plants grew!`, result.plantsGrowthUpdates);
+            // Re-fetch garden to update visuals
+            await refetchGarden();
+          }
+        }
+      } catch (error) {
+        console.error("Error updating growth:", error);
+      }
+    };
+
+    // Check immediately on mount
+    pollGrowthUpdates();
+
+    // Then check every 15 seconds
+    const growthInterval = setInterval(pollGrowthUpdates, 15000);
+
+    // Cleanup: stop polling when component unmounts or user changes
+    return () => {
+      clearInterval(growthInterval);
+    };
+  }, [user?.id, isVisiting]);
+
+  const handleCellClick = async (row: number, col: number) => {
     const cell = garden[row][col];
 
     // If there's a selected plant and the cell is dirt with no plant, plant it
     if (selectedPlant && cell.terrain === "dirt" && !cell.plant && (purchasedPlants[selectedPlant] ?? 0) > 0) {
-      const newGarden = garden.map((r) => [...r]);
-      newGarden[row][col] = {
-        ...cell,
-        plant: {
-          type: selectedPlant,
-          stage: 0, // Start as seedling
-        },
-      };
-      setGarden(newGarden);
-      setPurchasedPlants((prev) => ({
-        ...prev,
-        [selectedPlant]: (prev[selectedPlant] ?? 0) - 1,
-      }));
-      setSelectedPlant(null); // Deselect after planting
+      try {
+        // Convert array indices to database coordinates
+        const centerRow = 2;
+        const centerCol = 2;
+        const plotRow = centerRow - row;
+        const plotCol = col - centerCol;
+
+        // Find the plot at this position
+        const plot = plotsData.find((p) => p.row === plotRow && p.column === plotCol);
+
+        if (!plot) {
+          console.error("No plot found at this position");
+          return;
+        }
+
+        // Find a plant from inventory with growth=0 and isPlanted=false
+        const availablePlant = inventoryPlants.find((p) => p.plantType?.plantName?.toLowerCase() === selectedPlant && p.growth === 0 && p.isPlanted === false);
+
+        if (!availablePlant) {
+          console.error("No available plant in inventory");
+          return;
+        }
+
+        console.log("Available plant:", availablePlant);
+        const plantId = availablePlant._id || availablePlant.plantMongoId;
+
+        if (!plantId) {
+          console.error("Plant ID not found");
+          return;
+        }
+
+        const token = localStorage.getItem("auth_token");
+
+        console.log("Updating plot:", plot._id, "with plant:", plantId);
+
+        // Update the plot with the plant ID
+        const plotResponse = await fetch(`${API_BASE_URL}plots/${plot._id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            plantId: plantId,
+          }),
+        });
+
+        console.log("Plot update response:", plotResponse.status, await plotResponse.text());
+
+        // Update the plant to isPlanted=true
+        const plantResponse = await fetch(`${API_BASE_URL}plants/${plantId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            isPlanted: true,
+          }),
+        });
+
+        console.log("Plant update response:", plantResponse.status);
+
+        if (plotResponse.ok && plantResponse.ok) {
+          setSelectedPlant(null);
+          await fetchUserInventory();
+          await refetchGarden();
+        }
+      } catch (error) {
+        console.error("Failed to plant:", error);
+      }
     }
     // If there's a mature plant (stage 2), harvest it
     else if (cell.plant && cell.plant.stage === 2) {

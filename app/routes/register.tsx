@@ -68,7 +68,7 @@ export default function Register() {
         </h2>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-[11.2px]">
             {error}
           </div>
         )}
@@ -94,18 +94,35 @@ export default function Register() {
             autoComplete="new-password"
             minLength={8}
             disabled={isSubmitting}
+            onChange={(e) => {
+              const newPassword = e.target.value;
+              setPassword(newPassword);
+              checkPasswordMatch(newPassword, confirmPassword);
+            }}
           />
 
-          <PasswordInput
-            id="confirmPassword"
-            name="confirmPassword"
-            placeholder="Confirm Password"
-            required
-            aria-label="Confirm password"
-            autoComplete="new-password"
-            minLength={8}
-            disabled={isSubmitting}
-          />
+          <div>
+            <PasswordInput
+              id="confirmPassword"
+              name="confirmPassword"
+              placeholder="Confirm Password"
+              required
+              aria-label="Confirm password"
+              autoComplete="new-password"
+              minLength={8}
+              disabled={isSubmitting}
+              onChange={(e) => {
+                const newConfirmPassword = e.target.value;
+                setConfirmPassword(newConfirmPassword);
+                checkPasswordMatch(password, newConfirmPassword);
+              }}
+            />
+            {passwordMatchError && (
+              <p className="text-red-500 text-[10px] mt-1 ml-1">
+                {passwordMatchError}
+              </p>
+            )}
+          </div>
 
           <SubmitButton disabled={isSubmitting}>
             {isSubmitting ? "REGISTERING..." : "REGISTER"}

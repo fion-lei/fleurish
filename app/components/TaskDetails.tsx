@@ -6,30 +6,13 @@ type TaskDetailsProps = {
   buttonLabel?: string;
   onAccept?: (taskId: string) => void;
   isAccepting?: boolean;
-};
-
-export default function TaskDetails({ task, showButton, buttonLabel, onAccept, isAccepting }: TaskDetailsProps) {
-  if (!task) {
-    return <div className="p-3 border rounded-lg bg-fleur-purple shadow text-gray-500 text-sm max-h-[calc(100vh-140px)]">Select a task to view details.</div>;
   isCommunity?: boolean;
   completed?: boolean;
 };
 
-export default function TaskDetails({
-  task,
-  showButton,
-  buttonLabel,
-  isCommunity,
-  completed,
-}: TaskDetailsProps) {
+export default function TaskDetails({ task, showButton, buttonLabel, onAccept, isAccepting, isCommunity, completed }: TaskDetailsProps) {
   if (!task) {
-    return (
-      <div
-        className={`p-4 border rounded-l shadow text-gray-500 ${isCommunity ? "bg-fleur-purple" : "bg-orange-300"}`}
-      >
-        Select a task to view details.
-      </div>
-    );
+    return <div className={`p-3 border rounded-lg shadow text-gray-500 text-sm max-h-[calc(100vh-140px)] ${isCommunity ? "bg-fleur-purple" : "bg-orange-300"}`}>Select a task to view details.</div>;
   }
 
   const getStatusColor = (status: string) => {
@@ -59,7 +42,7 @@ export default function TaskDetails({
   };
 
   return (
-    <div className="p-3 border rounded-lg bg-fleur-purple shadow h-full flex flex-col max-h-[calc(100vh-140px)]">
+    <div className={`p-3 border rounded-lg shadow h-full flex flex-col max-h-[calc(100vh-140px)] ${isCommunity ? "bg-fleur-purple" : "bg-orange-300"}`}>
       <div className="flex justify-between items-start mb-2">
         <div className="flex-1">
           <h2 className="text-lg font-semibold">{task.title}</h2>
@@ -80,11 +63,7 @@ export default function TaskDetails({
         </button>
       )}
 
-      {completed && (
-        <p className="mt-auto text-center font-medium text-gray-700">
-          You have completed this task!
-        </p>
-      )}
+      {completed && <p className="mt-auto text-center font-medium text-gray-700">You have completed this task!</p>}
     </div>
   );
 }

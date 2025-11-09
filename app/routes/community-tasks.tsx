@@ -4,9 +4,6 @@ import TaskDetails from "~/components/TaskDetails";
 import TaskList from "~/components/TaskList";
 import type { Task } from "~/components/TaskList";
 import { Navbar } from "../components/Navbar";
-import TaskList from "~/components/TaskList";
-import TaskDetails from "~/components/TaskDetails";
-import type { Task } from "~/components/TaskList";
 import { useAuth } from "~/components/AuthContext";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -164,10 +161,11 @@ export default function CommunityTasks() {
               <div className="w-full">
                 <TaskDetails
                   task={selectedTask}
-                  showButton={true}
+                  showButton={selectedTask?.status === "new"}
                   buttonLabel="Accept Task"
                   onAccept={handleAcceptTask}
                   isAccepting={isAccepting}
+                  isCommunity={true}
                 />
               </div>
             </div>

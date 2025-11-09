@@ -10,6 +10,45 @@ import type { Route } from "./+types/garden";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+function createGardenFromPlots(plots: any[]): GardenCell[][] {
+  const baseGarden = createInitialGarden();
+
+  // Map to store plot positions
+  const plotMap = new Map<string, any>();
+  plots.forEach((plot) => {
+    const key = `${plot.row},${plot.column}`;
+    plotMap.set(key, plot);
+  });
+
+  const centerRow = 2;
+  const centerCol = 2;
+
+  // Update garden with plots
+  for (let row = -2; row <= 2; row++) {
+    for (let col = -2; col <= 2; col++) {
+      const key = `${row},${col}`;
+      const plot = plotMap.get(key);
+
+      const arrayRow = centerRow - row;
+      const arrayCol = centerCol + col;
+
+      if (plot && arrayRow >= 0 && arrayRow < 5 && arrayCol >= 0 && arrayCol < 5) {
+        // This plot exists, make it dirt
+        baseGarden[arrayRow][arrayCol].terrain = "dirt";
+
+        // Add plant if it exists
+        if (plot.plant) {
+          // Fetch plant data and set it
+          // For now, we'll need to handle this separately
+          baseGarden[arrayRow][arrayCol].plant = null; // Will be populated by separate plant fetch
+        }
+      }
+    }
+  }
+
+  return baseGarden;
+}
+
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Garden - Fleurish" }, { name: "description", content: "Your garden" }];
 }
@@ -20,6 +59,7 @@ export default function Garden() {
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [selectedPlant, setSelectedPlant] = useState<PlantType | null>(null);
   const [gardenName, setGardenName] = useState("Garden Name");
+  const [userGardenId, setUserGardenId] = useState<string | null>(null);
   const [selectedLand, setSelectedLand] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [purchasedPlants, setPurchasedPlants] = useState<Partial<Record<PlantType, number>>>({});
@@ -72,6 +112,73 @@ export default function Garden() {
 
     fetchPlantTypes();
   }, []);
+
+  // Fetch user's garden and plots
+  useEffect(() => {
+    const fetchUserGarden = async () => {
+      if (!user?.gardenId) return;
+
+      const gardenId = typeof user.gardenId === "string" ? user.gardenId : (user.gardenId as any)?._id || (user.gardenId as any)?.gardenMongoId;
+
+      if (!gardenId) return;
+
+      try {
+        const token = localStorage.getItem("auth_token");
+
+        // Fetch user's garden directly by gardenId
+        const gardenResponse = await fetch(`${API_BASE_URL}gardens/${gardenId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (gardenResponse.ok) {
+          const gardenResult = await gardenResponse.json();
+          const userGarden = gardenResult.data;
+
+          if (userGarden) {
+            setUserGardenId(userGarden.gardenMongoId || gardenId);
+            setGardenName(userGarden.name || "My Garden");
+
+            // Use plots array from garden data
+            const plots = userGarden.plots || [];
+
+            // Convert plots to garden grid
+            const newGarden = createGardenFromPlots(plots);
+            setGarden(newGarden);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch user garden:", error);
+      }
+    };
+
+    fetchUserGarden();
+  }, [user?.gardenId]);
+
+  // Helper to refetch garden data
+  const refetchGarden = async () => {
+    if (!user?.gardenId || !userGardenId) return;
+
+    try {
+      const token = localStorage.getItem("auth_token");
+      const gardenResponse = await fetch(`${API_BASE_URL}gardens/${userGardenId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (gardenResponse.ok) {
+        const gardenResult = await gardenResponse.json();
+        const userGarden = gardenResult.data;
+        const plots = userGarden?.plots || [];
+        const newGarden = createGardenFromPlots(plots);
+        setGarden(newGarden);
+      }
+    } catch (error) {
+      console.error("Failed to refetch garden:", error);
+    }
+  };
 
   // Fetch user's inventory
   const fetchUserInventory = async () => {
@@ -308,10 +415,21 @@ export default function Garden() {
     const userGems = user?.gems ?? 0;
 
     // Only allow buying dirt on MM_grass cells when land is selected
-    if (cell.terrain === "MM_grass" && selectedLand && userGems >= landPrice && user?.id) {
+    if (cell.terrain === "MM_grass" && selectedLand && userGems >= landPrice && user?.id && userGardenId) {
       try {
         const token = localStorage.getItem("auth_token");
-        const response = await fetch(`${API_BASE_URL}users/gems/remove`, {
+
+        // Convert array indices to center-based coordinates
+        // Center is at index (2,2)
+        const centerRow = 2;
+        const centerCol = 2;
+        const plotRow = centerRow - row;
+        const plotCol = col - centerCol;
+
+        console.log(`Buying dirt at array [${row},${col}] -> database coords (${plotRow},${plotCol})`);
+
+        // Remove gems
+        const gemsResponse = await fetch(`${API_BASE_URL}users/gems/remove`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -323,15 +441,26 @@ export default function Garden() {
           }),
         });
 
-        if (response.ok) {
-          const newGarden = garden.map((r) => [...r]);
-          newGarden[row][col] = {
-            ...cell,
-            terrain: "dirt",
-          };
-          setGarden(newGarden);
-          setSelectedLand(false); // Deselect after placing land
-          await refreshUser();
+        if (gemsResponse.ok) {
+          // Create plot in database
+          const plotResponse = await fetch(`${API_BASE_URL}plots`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              gardenId: userGardenId,
+              row: plotRow,
+              col: plotCol,
+            }),
+          });
+
+          if (plotResponse.ok) {
+            setSelectedLand(false); // Deselect after placing land
+            await refreshUser();
+            await refetchGarden(); // Refetch garden to get updated plots
+          }
         }
       } catch (error) {
         console.error("Failed to buy dirt:", error);

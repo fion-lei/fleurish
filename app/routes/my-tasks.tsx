@@ -4,7 +4,6 @@ import { useState } from "react";
 import TaskDetails from "~/components/TaskDetails";
 import type { Task } from "~/components/TaskList";
 import TaskList from "~/components/TaskList";
-import { Navbar } from "../components/Navbar";
 
 export function meta({}: Route.MetaArgs) {
   return [

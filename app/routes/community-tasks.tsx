@@ -11,26 +11,32 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const statusOrder = { new: 0, in_progress: 1, completed: 2 };
 
 export function meta({}: Route.MetaArgs) {
-  return [{ title: "Community Tasks - Fleurish" }, { name: "description", content: "Community tasks" }];
+  return [{ title: "Community - Fleurish" }, { name: "description", content: "Community hub" }];
+}
+
+interface CommunityMember {
+  _id: string;
+  username: string;
+  coins: number;
+  gems: number;
+  totalWealth: number;
 }
 
 export default function CommunityTasks() {
   const { user, loading: authLoading, refreshUser } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [members, setMembers] = useState<CommunityMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [membersLoading, setMembersLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isAccepting, setIsAccepting] = useState(false);
 
   useEffect(() => {
     const fetchTasks = async () => {
-      // Wait for auth to complete
       if (authLoading) {
         return;
       }
-
-      console.log("User object:", user);
-      console.log("Community ID:", user?.communityId);
 
       if (!user?.communityId) {
         setLoading(false);
@@ -50,8 +56,6 @@ export default function CommunityTasks() {
         }
 
         const data = await response.json();
-        console.log("Fetched tasks:", data);
-        // Handle nested response structure and map backend fields to frontend Task interface
         const tasksArray = data.data || [];
         const mappedTasks = tasksArray.map((task: any) => ({
           id: task._id,
@@ -61,7 +65,6 @@ export default function CommunityTasks() {
           status: task.status,
         }));
 
-        // Sort tasks: new, in_progress, then completed
         const sortedTasks = mappedTasks.sort((a: Task, b: Task) => {
           return statusOrder[a.status as keyof typeof statusOrder] - statusOrder[b.status as keyof typeof statusOrder];
         });
@@ -79,11 +82,83 @@ export default function CommunityTasks() {
     fetchTasks();
   }, [user?.communityId, authLoading]);
 
-  const handleAcceptTask = async (taskId: string) => {
-    console.log("Accept task clicked, taskId:", taskId);
-    console.log("User:", user);
-    console.log("User ID:", user?.id);
+  useEffect(() => {
+    const fetchCommunityMembers = async () => {
+      if (authLoading) {
+        return;
+      }
 
+      if (!user?.communityId) {
+        setMembersLoading(false);
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem("auth_token");
+        const response = await fetch(`${API_BASE_URL}users`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch members");
+        }
+
+        const data = await response.json();
+        const usersData = data.data?.users || data.users || data.data || [];
+
+        // Filter users in the same community and fetch their garden names
+        const memberPromises = usersData
+          .filter((userData: any) => userData.communityId === user.communityId)
+          .map(async (userData: any) => {
+            const gardenId = userData.gardenId;
+            const coins = userData.coins || 0;
+            const gems = userData.gems || 0;
+
+            if (!gardenId) return null;
+
+            try {
+              const gardenResponse = await fetch(`${API_BASE_URL}gardens/${gardenId}`, {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              });
+
+              if (!gardenResponse.ok) return null;
+
+              const gardenData = await gardenResponse.json();
+              const garden = gardenData.data || gardenData;
+
+              return {
+                _id: userData.userId || userData._id,
+                username: garden.gardenName || "Unknown",
+                coins,
+                gems,
+                totalWealth: coins + gems,
+              };
+            } catch {
+              return null;
+            }
+          });
+
+        const membersList = (await Promise.all(memberPromises)).filter((member): member is CommunityMember => member !== null);
+
+        // Sort by total wealth (coins + gems) descending
+        membersList.sort((a, b) => b.totalWealth - a.totalWealth);
+
+        setMembers(membersList);
+      } catch (err) {
+        console.error("Error fetching community members:", err);
+      } finally {
+        setMembersLoading(false);
+      }
+    };
+
+    fetchCommunityMembers();
+  }, [user?.communityId, authLoading]);
+
+  const handleAcceptTask = async (taskId: string) => {
     if (!user?.id) {
       console.error("No user ID available");
       return;
@@ -92,8 +167,6 @@ export default function CommunityTasks() {
     setIsAccepting(true);
     try {
       const token = localStorage.getItem("auth_token");
-      console.log("Making PUT request to:", `${API_BASE_URL}tasks/${taskId}`);
-
       const response = await fetch(`${API_BASE_URL}tasks/${taskId}`, {
         method: "PUT",
         headers: {
@@ -106,21 +179,12 @@ export default function CommunityTasks() {
         }),
       });
 
-      console.log("Response status:", response.status);
-
       if (!response.ok) {
         const errorData = await response.json();
-        console.error("Error response:", errorData);
         throw new Error(errorData.message || "Failed to accept task");
       }
 
-      const result = await response.json();
-      console.log("Task accepted successfully:", result);
-
-      // Update the task in local state
       setTasks((prevTasks) => prevTasks.map((task) => (task.id === taskId ? { ...task, status: "in_progress" } : task)));
-
-      // Refresh user data to update gems/coins in the footer
       await refreshUser();
     } catch (err) {
       console.error("Error accepting task:", err);
@@ -136,40 +200,90 @@ export default function CommunityTasks() {
     <div className="min-h-screen bg-[#FFF9EB]">
       <Navbar />
       <main className="pt-16 px-4 sm:px-6 md:px-8 lg:px-12 container mx-auto max-w-7xl">
-        <h1 className="text-xl font-semibold mb-3 ml-4 sm:ml-6">Community Tasks</h1>
+        <h1 className="text-3xl font-semibold mb-6 ml-4 sm:ml-6">Community</h1>
 
-        {loading ? (
-          <div className="flex justify-center items-center h-48">
-            <p className="text-gray-600">Loading tasks...</p>
-          </div>
-        ) : error ? (
-          <div className="flex justify-center items-center h-48">
-            <p className="text-red-600">{error}</p>
-          </div>
-        ) : !user?.communityId ? (
+        {!user?.communityId ? (
           <div className="flex justify-center items-center h-48">
             <p className="text-gray-600">You need to join a community first.</p>
           </div>
         ) : (
-          <div className="flex justify-center">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-h-[calc(100vh-140px)]">
-              <div className="w-full">
-                <TaskList
-                  tasks={tasks}
-                  selectedTask={selectedTaskId}
-                  onSelect={setSelectedTaskId}
-                />
-              </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Tasks Section - 2/3 width */}
+            <div className="lg:col-span-2 space-y-6">
+              <h2 className="text-xl font-semibold ml-4 sm:ml-6">Community Tasks</h2>
 
-              <div className="w-full">
-                <TaskDetails
-                  task={selectedTask}
-                  showButton={selectedTask?.status === "new"}
-                  buttonLabel="Accept Task"
-                  onAccept={handleAcceptTask}
-                  isAccepting={isAccepting}
-                  isCommunity={true}
-                />
+              {loading ? (
+                <div className="flex justify-center items-center h-48">
+                  <p className="text-gray-600">Loading tasks...</p>
+                </div>
+              ) : error ? (
+                <div className="flex justify-center items-center h-48">
+                  <p className="text-red-600">{error}</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <TaskList
+                    tasks={tasks}
+                    selectedTask={selectedTaskId}
+                    onSelect={setSelectedTaskId}
+                  />
+                  <TaskDetails
+                    task={selectedTask}
+                    showButton={selectedTask?.status === "new"}
+                    buttonLabel="Accept Task"
+                    onAccept={handleAcceptTask}
+                    isAccepting={isAccepting}
+                    isCommunity={true}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Leaderboard Section - 1/3 width */}
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold">People in your community</h2>
+
+              <div className="bg-white rounded-2xl shadow-soft p-6 max-h-[600px] overflow-y-auto">
+                {membersLoading ? (
+                  <p className="text-gray-600 text-center">Loading members...</p>
+                ) : members.length === 0 ? (
+                  <p className="text-gray-600 text-center">No members found</p>
+                ) : (
+                  <div className="space-y-3">
+                    {members.map((member, index) => (
+                      <div
+                        key={member._id}
+                        className={`flex items-center justify-between p-4 rounded-xl ${index === 0 ? "bg-fleur-purple text-white" : index === 1 ? "bg-fleur-green text-white" : index === 2 ? "bg-fleur-apple text-fleur-green" : "bg-gray-50"}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-semibold min-w-[30px]">#{index + 1}</span>
+                          <span className={`font-medium ${member._id === user.id ? "font-bold" : ""}`}>
+                            {member.username}
+                            {member._id === user.id && " (You)"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1">
+                            <img
+                              src="/images/gem.svg"
+                              alt="Gems"
+                              className="w-5 h-5"
+                            />
+                            <span className="font-bold">{member.gems}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <img
+                              src="/images/coin.svg"
+                              alt="Coins"
+                              className="w-5 h-5"
+                            />
+                            <span className="font-bold">{member.coins}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

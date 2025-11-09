@@ -20,7 +20,7 @@ export function Navbar() {
   const navItems = [
     { path: "/garden", label: "Garden" },
     { path: "/my-tasks", label: "My tasks" },
-    { path: "/community-tasks", label: "Community Tasks" },
+    { path: "/community-tasks", label: "Community" },
     { path: "/leaderboard", label: "Leaderboard" },
   ];
 
@@ -29,7 +29,10 @@ export function Navbar() {
       <div className="max-w-[1536px] mx-auto pl-4 pr-8 sm:pl-6 sm:pr-12 lg:pl-8 lg:pr-16">
         <div className="flex items-center justify-center h-[57.6px] relative">
           {/* Brand logo and title - links to garden page */}
-          <Link to="/garden" className="flex items-end gap-2 absolute left-0">
+          <Link
+            to="/garden"
+            className="flex items-end gap-2 absolute left-0"
+          >
             <h1 className="text-[26.46px] font-bold leading-none">
               <span className="text-fleur-green">fleur</span>
               <span className="text-fleur-purple">ish</span>
@@ -50,11 +53,7 @@ export function Navbar() {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`px-4 py-2 rounded-pill transition-all duration-300 ease-in-out ${
-                    isActive
-                      ? "bg-fleur-green text-white font-semibold"
-                      : "text-fleur-green hover:text-fleur-green/80"
-                  }`}
+                  className={`px-4 py-2 rounded-pill transition-all duration-300 ease-in-out ${isActive ? "bg-fleur-green text-white font-semibold" : "text-fleur-green hover:text-fleur-green/80"}`}
                 >
                   {item.label}
                 </Link>
@@ -62,18 +61,12 @@ export function Navbar() {
             })}
           </div>
 
-          <div 
-            className={`flex items-center rounded-full transition-all duration-300 ease-in-out ${
-              showDropdown ? "bg-fleur-purple/10" : ""
-            }`}
+          <div
+            className={`flex items-center rounded-full transition-all duration-300 ease-in-out ${showDropdown ? "bg-fleur-purple/10" : ""}`}
             onMouseEnter={() => setShowDropdown(true)}
             onMouseLeave={() => setShowDropdown(false)}
           >
-            <div 
-              className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                showDropdown ? 'w-[88px] pl-2' : 'w-0'
-              }`}
-            >
+            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showDropdown ? "w-[88px] pl-2" : "w-0"}`}>
               <button
                 onClick={handleLogout}
                 className="whitespace-nowrap text-fleur-purple transition-colors focus:outline-none bg-white/80 px-3 py-1 rounded-full mr-1"
@@ -84,9 +77,7 @@ export function Navbar() {
 
             <Link
               to="/profile"
-              className={`p-2 rounded-full transition-all duration-300 ease-in-out flex focus:outline-none ${
-                showDropdown ? "text-fleur-purple" : "text-fleur-green hover:text-fleur-purple"
-              }`}
+              className={`p-2 rounded-full transition-all duration-300 ease-in-out flex focus:outline-none ${showDropdown ? "text-fleur-purple" : "text-fleur-green hover:text-fleur-purple"}`}
               aria-label="Profile"
               onClick={(e) => {
                 e.currentTarget.blur();

@@ -18,6 +18,7 @@ export default function CommunityTasks() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [isAccepting, setIsAccepting] = useState(false);
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -70,6 +71,54 @@ export default function CommunityTasks() {
     fetchTasks();
   }, [user?.communityId, authLoading]);
 
+  const handleAcceptTask = async (taskId: string) => {
+    console.log("Accept task clicked, taskId:", taskId);
+    console.log("User:", user);
+    console.log("User ID:", user?.id);
+
+    if (!user?.id) {
+      console.error("No user ID available");
+      return;
+    }
+
+    setIsAccepting(true);
+    try {
+      const token = localStorage.getItem("auth_token");
+      console.log("Making PUT request to:", `${API_BASE_URL}tasks/${taskId}`);
+
+      const response = await fetch(`${API_BASE_URL}tasks/${taskId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          status: "in_progress",
+          completedUserId: user.id,
+        }),
+      });
+
+      console.log("Response status:", response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Error response:", errorData);
+        throw new Error(errorData.message || "Failed to accept task");
+      }
+
+      const result = await response.json();
+      console.log("Task accepted successfully:", result);
+
+      // Update the task in local state
+      setTasks((prevTasks) => prevTasks.map((task) => (task.id === taskId ? { ...task, status: "in_progress" } : task)));
+    } catch (err) {
+      console.error("Error accepting task:", err);
+      alert(err instanceof Error ? err.message : "Failed to accept task");
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) || null;
 
   return (
@@ -106,6 +155,8 @@ export default function CommunityTasks() {
                   task={selectedTask}
                   showButton={true}
                   buttonLabel="Accept Task"
+                  onAccept={handleAcceptTask}
+                  isAccepting={isAccepting}
                 />
               </div>
             </div>

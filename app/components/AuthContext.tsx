@@ -40,7 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (response.ok) {
             const data = await response.json();
-            setUser(data.data?.user || data.user || data);
+            const userData = data.data?.user || data.user || data;
+            if (userData.userId && !userData.id) {
+              userData.id = userData.userId;
+            }
+            setUser(userData);
           } else {
             localStorage.removeItem("auth_token");
           }
@@ -72,7 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const data = await response.json();
     localStorage.setItem("auth_token", data.token || data.data?.token);
-    setUser(data.data?.user || data.user || data);
+    const userData = data.data?.user || data.user || data;
+    if (userData.userId && !userData.id) {
+      userData.id = userData.userId;
+    }
+    setUser(userData);
   };
 
   const register = async (email: string, password: string) => {
@@ -91,7 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const data = await response.json();
     localStorage.setItem("auth_token", data.token || data.data?.token);
-    setUser(data.data?.user || data.user || data);
+    const userData = data.data?.user || data.user || data;
+    if (userData.userId && !userData.id) {
+      userData.id = userData.userId;
+    }
+    setUser(userData);
   };
 
   const logout = async () => {

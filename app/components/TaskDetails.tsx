@@ -4,9 +4,11 @@ type TaskDetailsProps = {
   task: Task | null;
   showButton?: boolean;
   buttonLabel?: string;
+  onAccept?: (taskId: string) => void;
+  isAccepting?: boolean;
 };
 
-export default function TaskDetails({ task, showButton, buttonLabel }: TaskDetailsProps) {
+export default function TaskDetails({ task, showButton, buttonLabel, onAccept, isAccepting }: TaskDetailsProps) {
   if (!task) {
     return <div className="p-3 border rounded-lg bg-fleur-purple shadow text-gray-500 text-sm max-h-[calc(100vh-140px)]">Select a task to view details.</div>;
   }
@@ -49,7 +51,15 @@ export default function TaskDetails({ task, showButton, buttonLabel }: TaskDetai
 
       <p className="text-sm text-gray-700 flex-1">{task.description}</p>
 
-      {showButton && <button className="mt-3 self-center px-4 py-2 bg-fleur-green text-white text-sm rounded hover:opacity-90">{buttonLabel}</button>}
+      {showButton && (
+        <button
+          onClick={() => onAccept?.(task.id)}
+          disabled={isAccepting || task.status !== "new"}
+          className="mt-3 self-center px-4 py-2 bg-fleur-green text-white text-sm rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isAccepting ? "Accepting..." : buttonLabel}
+        </button>
+      )}
     </div>
   );
 }

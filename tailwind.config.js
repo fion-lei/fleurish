@@ -11,6 +11,8 @@ export default {
           melon: "#F0FFC8",
           matcha: "#85B254",
           apple: "#B5E78A",
+          blue: "#9CB3E8",
+          darkblue: "#7998DF",
         },
       },
       boxShadow: {
